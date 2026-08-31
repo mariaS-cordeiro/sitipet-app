@@ -3,8 +3,15 @@ SitiPet - Aplicativo de Gestão para Pet Shop e Hotelzinho
 Interface Streamlit principal com navegação fluida, branding e persistência de dados.
 """
 
-import streamlit as st
+import sys
 import os
+
+# Garantir que a raiz do projeto esteja no sys.path para Streamlit Cloud
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
+import streamlit as st
 from PIL import Image
 
 # Configuração da Página
@@ -87,19 +94,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Importar as visões
-from views.dashboard_view import render_dashboard
-from views.agenda_view import render_agenda
-from views.banho_tosa_view import render_banho_tosa
-from views.hospedagem_view import render_hospedagem
-from views.caixa_view import render_caixa
-from views.config_view import render_config
-from utils.storage import get_storage_status
+# Importar as visões com tratamento de erro
+try:
+    from views.dashboard_view import render_dashboard
+    from views.agenda_view import render_agenda
+    from views.banho_tosa_view import render_banho_tosa
+    from views.hospedagem_view import render_hospedagem
+    from views.caixa_view import render_caixa
+    from views.config_view import render_config
+    from utils.storage import get_storage_status
+except ModuleNotFoundError as e:
+    st.error(f"Erro ao carregar módulos: {e}")
+    st.warning("Verifique se as pastas 'views' e 'utils' foram enviadas para o seu repositório no GitHub.")
+    st.stop()
 
 # ==================== SIDEBAR ====================
 with st.sidebar:
     # Logo SitiPet
-    logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
+    logo_path = os.path.join(CURRENT_DIR, "assets", "logo.png")
     if os.path.exists(logo_path):
         try:
             image = Image.open(logo_path)
