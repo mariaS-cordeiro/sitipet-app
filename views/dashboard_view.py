@@ -1,4 +1,4 @@
-﻿"""
+"""
 Visão: Dashboard / Painel Geral - SitiPet
 Apresenta indicadores rápidos de gestão, alertas de atendimento e visão panorâmica.
 """
@@ -43,8 +43,11 @@ def render_dashboard(set_page_callback=None):
     # 3. Finanças do Mês Atual
     metricas_mes = calcular_metricas_financeiras(df_caixa, mes=mes_atual, ano=ano_atual)
 
+    # Data formatada hoje
+    hoje_fmt = format_date_br(d_hoje)
+
     # ==================== CARDS DE INDICADORES RÁPIDOS ====================
-    st.markdown("""
+    st.markdown(f"""
         <div style="background: linear-gradient(135deg, #24398e 0%, #1e293b 100%); padding: 18px 24px; border-radius: 16px; color: white; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.08);">
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
                 <div>
@@ -53,12 +56,12 @@ def render_dashboard(set_page_callback=None):
                 </div>
                 <div style="text-align: right; margin-top: 8px;">
                     <span style="background: rgba(255,255,255,0.15); padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
-                        📅 Hoje: %s
+                        📅 Hoje: {hoje_fmt}
                     </span>
                 </div>
             </div>
         </div>
-    """ % format_date_br(d_hoje), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -142,7 +145,6 @@ def render_dashboard(set_page_callback=None):
     with col_ag:
         st.markdown("### 📋 Compromissos de Hoje na Agenda")
         if not df_agenda_hoje.empty:
-            # Ordenar por horário
             df_agenda_hoje_sorted = df_agenda_hoje.sort_values(by="horario")
             
             for _, r in df_agenda_hoje_sorted.iterrows():
