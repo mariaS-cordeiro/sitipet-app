@@ -1,0 +1,18 @@
+﻿# Streamlit Secrets (Protege senhas e credenciais)
+.streamlit/secrets.toml
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Ambiente Virtual
+venv/
+env/
+.env
+
+# Arquivos temporários do SO
+.DS_Store
+Thumbs.db
