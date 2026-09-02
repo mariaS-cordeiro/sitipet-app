@@ -17,26 +17,45 @@ LOCAL_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 # Tabelas padrão do sistema
 TABLES = ["Agenda", "Banho_Tosa", "Hospedagem", "Caixa", "Servicos_Precos"]
 
-# Lista padrão de serviços e preços iniciais
+# Profissionais fixos da SitiPet
+PROFISSIONAIS = ["Silvaneidy (Groomer)", "Silvania"]
+
+# Tabela Oficial de Serviços e Preços por Porte - SitiPet
 DEFAULT_SERVICOS = [
-    {"id": "SRV-001", "categoria": "Tosa", "nome": "Tosa raspada", "preco_padrao": 60.0, "ativo": True},
-    {"id": "SRV-002", "categoria": "Tosa", "nome": "Tosa tamanho único", "preco_padrao": 70.0, "ativo": True},
-    {"id": "SRV-003", "categoria": "Tosa", "nome": "Tosa bebê", "preco_padrao": 80.0, "ativo": True},
-    {"id": "SRV-004", "categoria": "Tosa", "nome": "Tosa na tesoura", "preco_padrao": 90.0, "ativo": True},
-    {"id": "SRV-005", "categoria": "Tosa", "nome": "Tosa higiênica", "preco_padrao": 35.0, "ativo": True},
-    {"id": "SRV-006", "categoria": "Tosa", "nome": "Tosa da raça", "preco_padrao": 85.0, "ativo": True},
-    {"id": "SRV-007", "categoria": "Tosa", "nome": "Tosa completa", "preco_padrao": 95.0, "ativo": True},
-    {"id": "SRV-008", "categoria": "Tosa", "nome": "Aparagem", "preco_padrao": 40.0, "ativo": True},
-    {"id": "SRV-009", "categoria": "Tosa", "nome": "Desembolo", "preco_padrao": 30.0, "ativo": True},
-    {"id": "SRV-010", "categoria": "Tosa", "nome": "Outros tipos de tosa", "preco_padrao": 50.0, "ativo": True},
-    {"id": "SRV-011", "categoria": "Banho", "nome": "Banho simples", "preco_padrao": 50.0, "ativo": True},
-    {"id": "SRV-012", "categoria": "Banho", "nome": "Banho com hidratação", "preco_padrao": 75.0, "ativo": True},
-    {"id": "SRV-013", "categoria": "Banho", "nome": "Banho medicamentoso", "preco_padrao": 65.0, "ativo": True},
-    {"id": "SRV-014", "categoria": "Adicionais", "nome": "Corte de unhas", "preco_padrao": 15.0, "ativo": True},
-    {"id": "SRV-015", "categoria": "Adicionais", "nome": "Limpeza de ouvidos", "preco_padrao": 15.0, "ativo": True},
-    {"id": "SRV-016", "categoria": "Adicionais", "nome": "Escovação de dentes", "preco_padrao": 15.0, "ativo": True},
-    {"id": "SRV-017", "categoria": "Adicionais", "nome": "Hidratação profunda", "preco_padrao": 30.0, "ativo": True},
-    {"id": "SRV-018", "categoria": "Hotel", "nome": "Diária Hotelzinho", "preco_padrao": 80.0, "ativo": True},
+    # BANHO
+    {"id": "SRV-001", "categoria": "Banho", "nome": "Banho (Pequeno)", "preco_padrao": 50.0, "ativo": True},
+    {"id": "SRV-002", "categoria": "Banho", "nome": "Banho (Médio)", "preco_padrao": 70.0, "ativo": True},
+    {"id": "SRV-003", "categoria": "Banho", "nome": "Banho (Grande)", "preco_padrao": 100.0, "ativo": True},
+    {"id": "SRV-004", "categoria": "Banho", "nome": "Banho (Gigante)", "preco_padrao": 130.0, "ativo": True},
+    
+    # BANHO E TOSA HIGIÊNICA
+    {"id": "SRV-005", "categoria": "Banho e Tosa Higiênica", "nome": "Banho e Tosa Higiênica (Pequeno)", "preco_padrao": 70.0, "ativo": True},
+    {"id": "SRV-006", "categoria": "Banho e Tosa Higiênica", "nome": "Banho e Tosa Higiênica (Médio)", "preco_padrao": 90.0, "ativo": True},
+    {"id": "SRV-007", "categoria": "Banho e Tosa Higiênica", "nome": "Banho e Tosa Higiênica (Grande)", "preco_padrao": 130.0, "ativo": True},
+    {"id": "SRV-008", "categoria": "Banho e Tosa Higiênica", "nome": "Banho e Tosa Higiênica (Gigante)", "preco_padrao": 150.0, "ativo": True},
+    
+    # BANHO E TOSA COMPLETA - PEQUENO
+    {"id": "SRV-009", "categoria": "Tosa Pequeno", "nome": "Tosa Raspada (Pequeno)", "preco_padrao": 80.0, "ativo": True},
+    {"id": "SRV-010", "categoria": "Tosa Pequeno", "nome": "Tosa Bebê (Pequeno)", "preco_padrao": 120.0, "ativo": True},
+    {"id": "SRV-011", "categoria": "Tosa Pequeno", "nome": "Tosa Tamanho Único (Pequeno)", "preco_padrao": 100.0, "ativo": True},
+    
+    # BANHO E TOSA COMPLETA - MÉDIO
+    {"id": "SRV-012", "categoria": "Tosa Médio", "nome": "Tosa Raspada (Médio)", "preco_padrao": 100.0, "ativo": True},
+    {"id": "SRV-013", "categoria": "Tosa Médio", "nome": "Tosa Bebê (Médio)", "preco_padrao": 150.0, "ativo": True},
+    {"id": "SRV-014", "categoria": "Tosa Médio", "nome": "Tosa Tamanho Único (Médio)", "preco_padrao": 130.0, "ativo": True},
+    
+    # BANHO E TOSA COMPLETA - GRANDE
+    {"id": "SRV-015", "categoria": "Tosa Grande", "nome": "Tosa Raspada (Grande)", "preco_padrao": 130.0, "ativo": True},
+    {"id": "SRV-016", "categoria": "Tosa Grande", "nome": "Tosa Bebê (Grande)", "preco_padrao": 180.0, "ativo": True},
+    {"id": "SRV-017", "categoria": "Tosa Grande", "nome": "Tosa Tamanho Único (Grande)", "preco_padrao": 150.0, "ativo": True},
+    
+    # CUIDADOS E ADICIONAIS
+    {"id": "SRV-018", "categoria": "Adicionais", "nome": "Corte de unhas", "preco_padrao": 10.0, "ativo": True},
+    {"id": "SRV-019", "categoria": "Adicionais", "nome": "Higienização de ouvidos", "preco_padrao": 10.0, "ativo": True},
+    {"id": "SRV-020", "categoria": "Adicionais", "nome": "Higienização de boca", "preco_padrao": 10.0, "ativo": True},
+    
+    # HOTELZINHO
+    {"id": "SRV-021", "categoria": "Hotel", "nome": "Diária Hotelzinho", "preco_padrao": 80.0, "ativo": True},
 ]
 
 def get_initial_sample_data() -> dict:
@@ -49,11 +68,13 @@ def get_initial_sample_data() -> dict:
                 "data": hoje,
                 "horario": "09:00",
                 "pet_nome": "Thor",
+                "raca": "Shih-tzu",
+                "porte": "Pequeno",
                 "tutor_nome": "Mariana Silva",
                 "tutor_telefone": "(11) 98765-4321",
-                "servicos": "Banho simples + Tosa higiênica",
-                "valor_total": 85.0,
-                "profissional": "Carlos (Tosa)",
+                "servicos": "Banho e Tosa Higiênica (Pequeno)",
+                "valor_total": 70.0,
+                "profissional": "Silvaneidy (Groomer)",
                 "status": "Finalizado",
                 "observacoes": "Pet calmo e dócil",
                 "criado_em": hoje
@@ -63,27 +84,15 @@ def get_initial_sample_data() -> dict:
                 "data": hoje,
                 "horario": "14:00",
                 "pet_nome": "Pipoca",
+                "raca": "Poodle",
+                "porte": "Médio",
                 "tutor_nome": "Lucas Ferreira",
                 "tutor_telefone": "(11) 97654-3210",
-                "servicos": "Banho com hidratação + Tosa bebê",
-                "valor_total": 155.0,
-                "profissional": "Ana Paula",
+                "servicos": "Tosa Bebê (Médio) + Corte de unhas",
+                "valor_total": 160.0,
+                "profissional": "Silvania",
                 "status": "Em atendimento",
-                "observacoes": "Usar shampoo hipoalergênico",
-                "criado_em": hoje
-            },
-            {
-                "id": "AGD-103",
-                "data": hoje,
-                "horario": "16:30",
-                "pet_nome": "Mel",
-                "tutor_nome": "Beatriz Souza",
-                "tutor_telefone": "(11) 99123-4567",
-                "servicos": "Banho simples + Corte de unhas",
-                "valor_total": 65.0,
-                "profissional": "Carlos (Tosa)",
-                "status": "Confirmado",
-                "observacoes": "Tutor trará guia própria",
+                "observacoes": "Usar shampoo neutro",
                 "criado_em": hoje
             }
         ],
@@ -95,11 +104,11 @@ def get_initial_sample_data() -> dict:
                 "pet_nome": "Thor",
                 "tutor_nome": "Mariana Silva",
                 "tutor_telefone": "(11) 98765-4321",
-                "raca": "Golden Retriever",
-                "porte": "Grande",
-                "profissional": "Carlos (Tosa)",
-                "servicos_detalhados": "Banho simples (R$ 50,00), Tosa higiênica (R$ 35,00)",
-                "valor_total": 85.0,
+                "raca": "Shih-tzu",
+                "porte": "Pequeno",
+                "profissional": "Silvaneidy (Groomer)",
+                "servicos_detalhados": "Banho e Tosa Higiênica (Pequeno) (R$ 70,00)",
+                "valor_total": 70.0,
                 "status_pagamento": "Pago (Pix)",
                 "observacoes": "Pelagem escovada",
                 "criado_em": hoje
@@ -113,10 +122,10 @@ def get_initial_sample_data() -> dict:
                 "tutor_telefone": "(11) 91234-5678",
                 "data_entrada": hoje,
                 "data_saida": hoje,
-                "diarias": 3,
+                "diarias": 2,
                 "valor_diaria": 80.0,
-                "valor_total": 240.0,
-                "forma_pagamento": "Cartão de Crédito",
+                "valor_total": 160.0,
+                "forma_pagamento": "Pix",
                 "status": "Hospedado",
                 "alimentacao": "Ração Premier Adulto Raças Médias",
                 "refeicoes_dia": "2x ao dia (08h e 18h)",
@@ -136,7 +145,7 @@ def get_initial_sample_data() -> dict:
                 "categoria": "Banho e Tosa",
                 "servico_relacionado": "Banho e Tosa",
                 "descricao": "Atendimento Thor - Mariana Silva",
-                "valor": 85.0,
+                "valor": 70.0,
                 "forma_pagamento": "Pix",
                 "referencia_id": "AGD-101",
                 "observacao": "Finalizado via Agenda",
@@ -148,24 +157,11 @@ def get_initial_sample_data() -> dict:
                 "tipo": "Entrada",
                 "categoria": "Hospedagem",
                 "servico_relacionado": "Hospedagem",
-                "descricao": "Hospedagem Bob (3 diárias) - Roberto Mendes",
-                "valor": 240.0,
-                "forma_pagamento": "Cartão de Crédito",
+                "descricao": "Hospedagem Bob (2 diárias) - Roberto Mendes",
+                "valor": 160.0,
+                "forma_pagamento": "Pix",
                 "referencia_id": "HSP-301",
                 "observacao": "Entrada hotel",
-                "criado_em": hoje
-            },
-            {
-                "id": "CX-403",
-                "data": hoje,
-                "tipo": "Saída",
-                "categoria": "Produtos e Materiais",
-                "servico_relacionado": "Banho e Tosa",
-                "descricao": "Shampoo Neutro 5L e Condicionador",
-                "valor": 95.0,
-                "forma_pagamento": "Pix",
-                "referencia_id": "",
-                "observacao": "Distribuidora PetClean",
                 "criado_em": hoje
             }
         ],
@@ -179,7 +175,7 @@ def get_google_sheets_client():
         from google.oauth2.service_account import Credentials
 
         if "gcp_service_account" not in st.secrets:
-            return None, "Chave 'gcp_service_account' não encontrada nos Secrets do Streamlit."
+            return None, "Chave 'gcp_service_account' não configurada nos Secrets do Streamlit."
 
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
@@ -205,9 +201,9 @@ def get_spreadsheet():
         return spreadsheet, None
     except Exception:
         try:
-            # Tentar criar a planilha e compartilhar com sitipet01@gmail.com
+            # Tentar criar a planilha e compartilhar com siti.pet01@gmail.com
             spreadsheet = client.create(sheet_name)
-            target_email = st.secrets.get("google_account_email", "sitipet01@gmail.com")
+            target_email = st.secrets.get("google_account_email", "siti.pet01@gmail.com")
             spreadsheet.share(target_email, perm_type="user", role="writer")
             return spreadsheet, None
         except Exception as e:
@@ -222,23 +218,23 @@ def get_storage_status() -> dict:
             return {
                 "is_google_sheets": True,
                 "sheet_name": sh.title,
-                "account": st.secrets.get("google_account_email", "sitipet01@gmail.com"),
-                "status_label": "🟢 Conectado ao Google Sheets",
+                "account": st.secrets.get("google_account_email", "siti.pet01@gmail.com"),
+                "status_label": "🟢 Conectado ao Google Sheets (Nuvem Ativa)",
                 "error": None
             }
         else:
             return {
                 "is_google_sheets": False,
                 "sheet_name": None,
-                "account": st.secrets.get("google_account_email", "sitipet01@gmail.com"),
-                "status_label": "🟠 Modo Local Ativo (Erro ao abrir planilha)",
+                "account": st.secrets.get("google_account_email", "siti.pet01@gmail.com"),
+                "status_label": "🟠 Modo Local Ativo (Compartilhe a planilha no Drive)",
                 "error": sh_err
             }
     return {
         "is_google_sheets": False,
         "sheet_name": None,
-        "account": "sitipet01@gmail.com",
-        "status_label": "🔵 Modo Local / Fallback Ativo (Pronto para Uso)",
+        "account": "siti.pet01@gmail.com",
+        "status_label": "🔵 Modo Local Ativo (Dados salvos com segurança)",
         "error": err
     }
 
@@ -255,7 +251,12 @@ def _load_local_db() -> dict:
     
     try:
         with open(LOCAL_DB_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+            db = json.load(f)
+            # Garantir que tabela de preços tenha os novos serviços
+            if "Servicos_Precos" not in db or len(db.get("Servicos_Precos", [])) < 15:
+                db["Servicos_Precos"] = DEFAULT_SERVICOS
+                _save_local_db(db)
+            return db
     except Exception:
         data = get_initial_sample_data()
         return data
@@ -278,19 +279,19 @@ def load_table(table_name: str) -> pd.DataFrame:
                     worksheet = spreadsheet.worksheet(table_name)
                 except Exception:
                     # Criar aba se não existir
-                    worksheet = spreadsheet.add_worksheet(title=table_name, rows="500", cols="20")
+                    worksheet = spreadsheet.add_worksheet(title=table_name, rows="500", cols="25")
                     db_local = _load_local_db()
                     initial_rows = db_local.get(table_name, [])
                     if initial_rows:
                         df_init = pd.DataFrame(initial_rows)
-                        worksheet.update([df_init.columns.values.tolist()] + df_init.values.tolist())
+                        worksheet.update([df_init.columns.values.tolist()] + df_init.astype(str).values.tolist())
                         return df_init
                     return pd.DataFrame()
                 
                 records = worksheet.get_all_records()
                 return pd.DataFrame(records)
             except Exception:
-                pass # Em caso de erro na conexão, faz fallback para local
+                pass
 
     # Fallback Local
     db = _load_local_db()
@@ -301,7 +302,6 @@ def save_table(table_name: str, df: pd.DataFrame):
     """Salva o DataFrame completo na tabela (Google Sheets e Local)."""
     # 1. Salvar no Local DB
     db = _load_local_db()
-    # Limpar NaN para compatibilidade JSON
     df_clean = df.fillna("")
     db[table_name] = df_clean.to_dict(orient="records")
     _save_local_db(db)
@@ -409,8 +409,8 @@ def concluir_atendimento_agenda(
             "tutor_nome": item.get("tutor_nome", ""),
             "tutor_telefone": item.get("tutor_telefone", ""),
             "raca": item.get("raca", "Não informada"),
-            "porte": item.get("porte", "Médio"),
-            "profissional": item.get("profissional", "Geral"),
+            "porte": item.get("porte", "Pequeno"),
+            "profissional": item.get("profissional", "Silvaneidy (Groomer)"),
             "servicos_detalhados": item.get("servicos", "Banho e Tosa"),
             "valor_total": float(item.get("valor_total", 0.0)),
             "status_pagamento": f"Pago ({forma_pagamento})",
@@ -433,7 +433,7 @@ def concluir_atendimento_agenda(
                 "valor": valor,
                 "forma_pagamento": forma_pagamento,
                 "referencia_id": str(agenda_id),
-                "observacao": f"Serviços: {item.get('servicos', '')}",
+                "observacao": f"Serviços: {item.get('servicos', '')} | Profissional: {item.get('profissional', '')}",
                 "criado_em": get_today_date_str()
             }
             insert_record("Caixa", cx_record)

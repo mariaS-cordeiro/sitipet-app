@@ -1,15 +1,16 @@
 ﻿"""
 Visão: Aba 1 – Agenda Diária - SitiPet
-Controle dos atendimentos do dia, alertas de horário e fluxo integrado com Caixa e Banho & Tosa.
+Controle dos atendimentos do dia, alertas de horário, emissão de comprovantes e fluxo integrado.
 """
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, time
 import re
-from utils.storage import load_table, insert_record, update_record, delete_record, concluir_atendimento_agenda
+from utils.storage import load_table, insert_record, update_record, delete_record, concluir_atendimento_agenda, PROFISSIONAIS
 from utils.datas import get_today_date, get_today_date_str, format_date_br, calcular_status_alerta_horario, parse_date
 from utils.financeiro import formatar_moeda
+from utils.comprovante import renderizar_modal_comprovante
 
 STATUS_OPCOES = ["Agendado", "Confirmado", "Em atendimento", "Finalizado", "Cancelado"]
 
@@ -20,23 +21,16 @@ def format_whatsapp_link(telefone: str, pet_nome: str, horario: str) -> str:
     num_limpo = re.sub(r"[^\d]", "", telefone)
     if len(num_limpo) in [10, 11] and not num_limpo.startswith("55"):
         num_limpo = f"55{num_limpo}"
-    msg = f"Olá! Aqui é da SitiPet Pet Shop. Estamos confirmando o atendimento do(a) {pet_nome} agendado para às {horario}. Qualquer dúvida estamos à disposição! 🐾"
+    msg = f"Olá! Aqui é da SitiPet Pet Shop e Hotelzinho. Estamos confirmando o atendimento do(a) {pet_nome} agendado para às {horario}. Qualquer dúvida estamos à disposição! 🐾"
     import urllib.parse
     return f"https://wa.me/{num_limpo}?text={urllib.parse.quote(msg)}"
 
 def render_agenda():
     st.markdown("## 📅 Aba 1 – Agenda Diária de Atendimentos")
-    st.markdown("Gerencie os agendamentos diários, monitore horários e conclua atendimentos com envio automático para o Caixa.")
+    st.markdown("Gerencie os agendamentos diários, monitore horários, emita notas de serviço e conclua atendimentos com envio ao Caixa.")
 
     df_agenda = load_table("Agenda")
     df_servicos = load_table("Servicos_Precos")
-
-    # Lista de serviços para o seletor
-    lista_servicos = []
-    if not df_servicos.empty and "nome" in df_servicos.columns:
-        lista_servicos = df_servicos[df_servicos["ativo"] == True]["nome"].tolist()
-    if not lista_servicos:
-        lista_servicos = ["Banho simples", "Banho com hidratação", "Tosa higiênica", "Tosa completa", "Tosa bebê", "Corte de unhas"]
 
     # ==================== FORMULÁRIO DE NOVO AGENDAMENTO ====================
     with st.expander("➕ **Cadastrar Novo Atendimento na Agenda**", expanded=False):
@@ -49,37 +43,53 @@ def render_agenda():
                 tutor_nome = st.text_input("👤 Nome do Responsável / Tutor *", placeholder="Ex: Juliana Mendes")
                 tutor_telefone = st.text_input("📱 Telefone / WhatsApp *", placeholder="(11) 98765-4321")
             with col_f3:
-                porte = st.selectbox("Porte", ["Pequeno", "Médio", "Grande", "Gigante"])
-                profissional = st.selectbox("Profissional Responsável", ["Carlos (Tosa)", "Ana Paula (Banho)", "Mariana", "Equipe Geral"])
+                porte = st.selectbox("Porte do Pet", ["Pequeno", "Médio", "Grande", "Gigante"])
+                profissional = st.selectbox("Profissional Responsável", PROFISSIONAIS)
 
             col_f4, col_f5, col_f6 = st.columns(3)
             with col_f4:
                 data_agendada = st.date_input("📅 Data do Atendimento", value=get_today_date())
             with col_f5:
                 horarios_sugeridos = [f"{h:02d}:{m:02d}" for h in range(8, 20) for m in (0, 30)]
-                horario_agendado = st.selectbox("⏰ Horário", horarios_sugeridos, index=4) # 10:00
+                horario_agendado = st.selectbox("⏰ Horário", horarios_sugeridos, index=4)
             with col_f6:
                 status_inicial = st.selectbox("Status Inicial", STATUS_OPCOES, index=0)
 
+            # Opções de serviços dinâmicas baseadas no porte
+            servicos_disponiveis = []
+            if not df_servicos.empty and "nome" in df_servicos.columns:
+                servicos_disponiveis = df_servicos[df_servicos["ativo"] == True]["nome"].tolist()
+            else:
+                servicos_disponiveis = [
+                    f"Banho ({porte})",
+                    f"Banho e Tosa Higiênica ({porte})",
+                    f"Tosa Raspada ({porte})",
+                    f"Tosa Bebê ({porte})",
+                    f"Tosa Tamanho Único ({porte})",
+                    "Corte de unhas",
+                    "Higienização de ouvidos",
+                    "Higienização de boca"
+                ]
+
             servicos_selecionados = st.multiselect(
-                "✂️ Serviços Agendados *",
-                options=lista_servicos,
-                default=[lista_servicos[0]] if lista_servicos else []
+                "✂️ Selecione os Serviços Agendados *",
+                options=servicos_disponiveis,
+                default=[s for s in servicos_disponiveis if f"({porte})" in s][:1] if servicos_disponiveis else []
             )
 
-            # Estimativa de valor
+            # Calcular valor sugerido
             valor_estimado = 0.0
-            if not df_servicos.empty and "nome" in df_servicos.columns and "preco_padrao" in df_servicos.columns:
+            if not df_servicos.empty and "nome" in df_servicos.columns:
                 for s in servicos_selecionados:
-                    match_row = df_servicos[df_servicos["nome"] == s]
-                    if not match_row.empty:
-                        valor_estimado += float(match_row["preco_padrao"].values[0])
+                    row_s = df_servicos[df_servicos["nome"] == s]
+                    if not row_s.empty:
+                        valor_estimado += float(row_s["preco_padrao"].values[0])
 
             col_v1, col_v2 = st.columns([1, 2])
             with col_v1:
-                valor_total = st.number_input("💵 Valor Total Previsto (R$)", min_value=0.0, value=float(valor_estimado), step=5.0)
+                valor_total = st.number_input("💵 Valor Total (R$)", min_value=0.0, value=float(valor_estimado), step=5.0)
             with col_v2:
-                observacoes = st.text_input("📝 Observações", placeholder="Ex: Alergia a shampoo perfumado, trazer focinheira, etc.")
+                observacoes = st.text_input("📝 Observações", placeholder="Ex: Alergia a perfumes, trazer brinquedo favorito...")
 
             btn_salvar = st.form_submit_button("💾 Salvar Agendamento", use_container_width=True, type="primary")
 
@@ -92,7 +102,7 @@ def render_agenda():
                         "data": data_agendada.strftime("%Y-%m-%d"),
                         "horario": horario_agendado,
                         "pet_nome": pet_nome.strip(),
-                        "raca": raca.strip(),
+                        "raca": raca.strip() if raca else "SRD",
                         "porte": porte,
                         "tutor_nome": tutor_nome.strip(),
                         "tutor_telefone": tutor_telefone.strip(),
@@ -115,7 +125,7 @@ def render_agenda():
     with col_flt1:
         data_filtro = st.date_input("Filtrar por Data", value=get_today_date(), key="filtro_data_agenda")
     with col_flt2:
-        ver_todos_dias = st.checkbox("📅 Visualizar Todos os Dias (Histórico Completo)", value=False)
+        ver_todos_dias = st.checkbox("📅 Visualizar Histórico Completo", value=False)
     with col_flt3:
         status_filtro = st.selectbox("Filtrar por Status", ["Todos"] + STATUS_OPCOES)
 
@@ -137,7 +147,6 @@ def render_agenda():
     # Ordenar por data e horário
     df_exibicao = df_exibicao.sort_values(by=["data", "horario"], ascending=[True, True])
 
-    # Contadores rápidos do filtro
     total_filtrados = len(df_exibicao)
     total_concluidos = len(df_exibicao[df_exibicao["status"] == "Finalizado"])
     st.caption(f"Exibindo **{total_filtrados}** atendimento(s) | **{total_concluidos}** finalizado(s)")
@@ -146,6 +155,8 @@ def render_agenda():
     for _, row in df_exibicao.iterrows():
         ag_id = row.get("id")
         pet = row.get("pet_nome", "")
+        raca = row.get("raca", "")
+        porte = row.get("porte", "")
         tutor = row.get("tutor_nome", "")
         telefone = row.get("tutor_telefone", "")
         data_atend = row.get("data", "")
@@ -153,7 +164,7 @@ def render_agenda():
         servicos = row.get("servicos", "")
         valor = float(row.get("valor_total", 0.0))
         status = row.get("status", "Agendado")
-        prof = row.get("profissional", "Geral")
+        prof = row.get("profissional", "Silvaneidy (Groomer)")
         obs = row.get("observacoes", "")
 
         alerta = calcular_status_alerta_horario(data_atend, horario, status)
@@ -161,7 +172,7 @@ def render_agenda():
 
         with st.container():
             st.markdown(f"""
-                <div style="background: white; border-radius: 14px; padding: 18px 22px; margin-bottom: 15px; border-left: 6px solid {cor_borda}; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+                <div style="background: white; border-radius: 14px; padding: 18px 22px; margin-bottom: 12px; border-left: 6px solid {cor_borda}; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
                         <div>
                             <span style="font-size: 18px; font-weight: 800; color: #1e293b;">⏰ {horario} - 🐶 {pet}</span>
@@ -182,34 +193,57 @@ def render_agenda():
             """, unsafe_allow_html=True)
 
             # Botões de Ação do Card
-            col_b1, col_b2, col_b3, col_b4 = st.columns([2, 3, 2, 2])
+            col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns([2, 3, 2, 2, 2])
             
             with col_b1:
                 if status == "Agendado":
                     if st.button("✂️ Iniciar", key=f"btn_init_{ag_id}", use_container_width=True):
                         update_record("Agenda", ag_id, {"status": "Em atendimento"})
-                        st.success(f"Atendimento de {pet} iniciado!")
                         st.rerun()
                 elif status == "Em atendimento":
-                    st.info("Em atendimento...")
+                    st.info("Em atendimento")
 
             with col_b2:
                 if status != "Finalizado" and status != "Cancelado":
-                    with st.popover("✅ Concluir & Lançar Caixa", use_container_width=True):
+                    with st.popover("✅ Concluir & Lançar", use_container_width=True):
                         st.markdown(f"**Concluir atendimento de {pet}**")
                         st.write(f"Valor a receber: **{formatar_moeda(valor)}**")
                         forma_pag = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro"], key=f"fp_{ag_id}")
                         if st.button("Confirmar Conclusão", key=f"conf_{ag_id}", type="primary"):
                             concluir_atendimento_agenda(ag_id, forma_pagamento=forma_pag)
-                            st.success(f"Atendimento de {pet} concluído e lançado no Caixa!")
+                            st.success(f"Atendimento concluído e lançado no Caixa!")
                             st.rerun()
 
             with col_b3:
+                # Botão de emissão de Comprovante / Nota
+                with st.popover("🖨️ Emitir Nota", use_container_width=True):
+                    itens_recibo = []
+                    for s_item in servicos.split("+"):
+                        s_strip = s_item.strip()
+                        itens_recibo.append({"nome": s_strip, "valor": valor / max(1, len(servicos.split("+")))})
+                    
+                    renderizar_modal_comprovante(
+                        titulo="Comprovante de Atendimento",
+                        cliente_nome=tutor,
+                        cliente_telefone=telefone,
+                        pet_nome=pet,
+                        raca=raca,
+                        porte=porte,
+                        profissional=prof,
+                        data_servico=data_atend,
+                        itens=itens_recibo,
+                        valor_total=valor,
+                        forma_pagamento="Confirmado / Concluído",
+                        observacoes=obs,
+                        codigo_recibo=str(ag_id)
+                    )
+
+            with col_b4:
                 wa_url = format_whatsapp_link(telefone, pet, horario)
                 if wa_url:
                     st.link_button("💬 WhatsApp", wa_url, use_container_width=True)
 
-            with col_b4:
+            with col_b5:
                 with st.popover("⚙️ Opções", use_container_width=True):
                     novo_st = st.selectbox("Alterar Status", STATUS_OPCOES, index=STATUS_OPCOES.index(status) if status in STATUS_OPCOES else 0, key=f"sel_st_{ag_id}")
                     if st.button("Salvar Status", key=f"save_st_{ag_id}"):
@@ -219,5 +253,4 @@ def render_agenda():
                     st.divider()
                     if st.button("🗑️ Excluir", key=f"del_{ag_id}", type="secondary"):
                         delete_record("Agenda", ag_id)
-                        st.warning("Atendimento excluído.")
                         st.rerun()

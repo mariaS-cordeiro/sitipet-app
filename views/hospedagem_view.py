@@ -1,6 +1,6 @@
 ﻿"""
 Visão: Aba 3 – Hospedagem / Hotelzinho - SitiPet
-Controle de check-in, check-out, cálculo de diárias, ficha médica/comportamento e integração com Caixa.
+Controle de check-in, check-out, cálculo de diárias, ficha médica/comportamento e emissão de notas.
 """
 
 import streamlit as st
@@ -10,20 +10,14 @@ import uuid
 from utils.storage import load_table, insert_record, update_record, delete_record, concluir_hospedagem
 from utils.datas import get_today_date, get_today_date_str, format_date_br, calc_dias_hospedagem, parse_date
 from utils.financeiro import formatar_moeda
+from utils.comprovante import renderizar_modal_comprovante
 
 def render_hospedagem():
     st.markdown("## 🏨 Aba 3 – Hospedagem / Hotelzinho SitiPet")
-    st.markdown("Gestão de estadias, cálculo automático de diárias, controle de cuidados especiais e check-out com envio ao Caixa.")
+    st.markdown("Gestão de estadias, cálculo automático de diárias (R$ 80,00), controle de cuidados e recibos de hospedagem.")
 
     df_hosp = load_table("Hospedagem")
-    df_servicos = load_table("Servicos_Precos")
-
-    # Obter valor padrão de diária
     preco_diaria_padrao = 80.0
-    if not df_servicos.empty and "nome" in df_servicos.columns and "preco_padrao" in df_servicos.columns:
-        match_h = df_servicos[df_servicos["nome"].str.contains("Hotel|Diária", case=False, na=False)]
-        if not match_h.empty:
-            preco_diaria_padrao = float(match_h["preco_padrao"].values[0])
 
     # ==================== FORMULÁRIO DE NOVA HOSPEDAGEM ====================
     with st.expander("➕ **Registrar Nova Hospedagem / Check-in**", expanded=False):
@@ -63,23 +57,23 @@ def render_hospedagem():
 
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            forma_pag = st.selectbox("Forma de Pagamento Prevista", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro", "Pagar no Check-out"], key="hsp_formapag")
+            forma_pag = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro", "Pagar no Check-out"], key="hsp_formapag")
         with col_f2:
             status_inicial = st.selectbox("Status da Hospedagem", ["Hospedado", "Reservado", "Concluído"], key="hsp_status")
 
         st.markdown("#### 3. Ficha de Cuidados & Informações Importantes")
         col_c1, col_c2 = st.columns(2)
         with col_c1:
-            alimentacao = st.text_input("🥣 Alimentação (Tipo / Marca de Ração)", placeholder="Ex: Ração Premier Adulto Raças Médias", key="hsp_alim")
-            refeicoes_dia = st.text_input("⏰ Quantidade de Refeições / Dia e Horários", placeholder="Ex: 2x ao dia (08:00 e 18:00)", key="hsp_ref")
-            medicacao = st.text_input("💊 Medicação e Instruções", placeholder="Ex: Probiótico 1 cápsula pela manhã ou 'Nenhuma'", key="hsp_med")
+            alimentacao = st.text_input("🥣 Alimentação (Tipo / Marca de Ração)", placeholder="Ex: Ração Premier Adulto", key="hsp_alim")
+            refeicoes_dia = st.text_input("⏰ Quantidade de Refeições / Dia", placeholder="Ex: 2x ao dia (08:00 e 18:00)", key="hsp_ref")
+            medicacao = st.text_input("💊 Medicação e Instruções", placeholder="Ex: Nenhum ou dosagem específica", key="hsp_med")
         
         with col_c2:
-            comportamento = st.text_input("🐾 Comportamento / Temperamento", placeholder="Ex: Dócil, amigável com outros cães, não gosta de gatos", key="hsp_comp")
-            restricoes = st.text_input("⚠️ Restrições / Alergias", placeholder="Ex: Alergia a frango, não deixar pular muito", key="hsp_rest")
+            comportamento = st.text_input("🐾 Comportamento / Temperamento", placeholder="Ex: Dócil, brinca bem com outros pets", key="hsp_comp")
+            restricoes = st.text_input("⚠️ Restrições / Alergias", placeholder="Ex: Alergia a petisco de frango", key="hsp_rest")
             contato_emergencia = st.text_input("🚨 Contato de Emergência", placeholder="Ex: Dra. Camila Veterinária: (11) 98888-0000", key="hsp_emerg")
 
-        observacoes = st.text_area("📝 Observações Gerais do Tutor", placeholder="Ex: Trouxe cobertor favorito e comedouro próprio.", key="hsp_obs")
+        observacoes = st.text_area("📝 Observações Gerais do Tutor", placeholder="Ex: Trouxe caminha e cobertor próprio...", key="hsp_obs")
 
         if st.button("💾 Confirmar Check-in / Salvar Hospedagem", type="primary", use_container_width=True):
             if not pet_nome or not tutor_nome:
@@ -144,7 +138,6 @@ def render_hospedagem():
                     val_tot = float(row.get("valor_total", 0.0))
                     forma_pag = row.get("forma_pagamento", "Pendente")
                     
-                    # Checagem de saída hoje ou atrasada
                     d_out_obj = parse_date(dt_out)
                     is_checkout_hoje = (d_out_obj == d_hoje)
                     is_checkout_atrasado = (d_out_obj < d_hoje)
@@ -189,7 +182,7 @@ def render_hospedagem():
                         </div>
                     """, unsafe_allow_html=True)
 
-                    col_chk1, col_chk2 = st.columns([3, 1])
+                    col_chk1, col_chk2, col_chk3 = st.columns([3, 2, 1])
                     with col_chk1:
                         with st.popover(f"🏁 **Realizar Check-out de {pet}**", use_container_width=True):
                             st.markdown(f"#### Check-out do Hóspede {pet}")
@@ -207,7 +200,25 @@ def render_hospedagem():
                                 st.rerun()
 
                     with col_chk2:
-                        if st.button("🗑️ Excluir", key=f"del_hsp_{h_id}"):
+                        with st.popover("🖨️ Recibo de Hotel", use_container_width=True):
+                            renderizar_modal_comprovante(
+                                titulo="Recibo de Hospedagem / Hotelzinho",
+                                cliente_nome=tutor,
+                                cliente_telefone=tel,
+                                pet_nome=pet,
+                                profissional="Equipe SitiPet",
+                                data_servico=dt_in,
+                                itens=[
+                                    {"nome": f"Diárias Hotelzinho ({diarias} diárias x {formatar_moeda(val_diaria)})", "valor": val_tot}
+                                ],
+                                valor_total=val_tot,
+                                forma_pagamento=forma_pag,
+                                observacoes=f"Entrada: {format_date_br(dt_in)} | Previsão Saída: {format_date_br(dt_out)}",
+                                codigo_recibo=str(h_id)
+                            )
+
+                    with col_chk3:
+                        if st.button("🗑️", key=f"del_hsp_{h_id}"):
                             delete_record("Hospedagem", h_id)
                             st.rerun()
 
@@ -232,9 +243,7 @@ def render_hospedagem():
             if st_filtro != "Todos":
                 df_h_show = df_h_show[df_h_show["status"] == st_filtro]
 
-            # Ordenar por data de entrada decrescente
             df_h_show = df_h_show.sort_values(by="data_entrada", ascending=False)
-            
             st.caption(f"Mostrando **{len(df_h_show)}** registro(s)")
             
             for _, r in df_h_show.iterrows():

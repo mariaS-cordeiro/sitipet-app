@@ -1,6 +1,6 @@
 ﻿"""
 Visão: Configurações & Google Sheets - SitiPet
-Gerenciamento de conexão com o Google Drive/Sheets, edição de tabela de preços e backup.
+Gerenciamento de conexão com o Google Drive/Sheets (siti.pet01@gmail.com), edição de tabela de preços e backup.
 """
 
 import streamlit as st
@@ -12,7 +12,7 @@ from utils.financeiro import formatar_moeda
 
 def render_config():
     st.markdown("## ⚙️ Configurações & Conexão Google Drive / Sheets")
-    st.markdown("Gerencie a persistência na nuvem, tabela de preços dos serviços e backups do sistema.")
+    st.markdown("Gerencie a persistência na nuvem (`siti.pet01@gmail.com`), tabela de preços dos serviços e backups do sistema.")
 
     status_storage = get_storage_status()
 
@@ -21,49 +21,52 @@ def render_config():
     if status_storage["is_google_sheets"]:
         st.success(f"""
             **{status_storage['status_label']}**  
-            - **Planilha Ativa:** `{status_storage['sheet_name']}`  
-            - **Conta Vinculada:** `{status_storage['account']}`  
-            - Todos os lançamentos e alterações estão sendo sincronizados continuamente com o seu Google Drive!
+            - **Planilha Ativa no Google Drive:** `{status_storage['sheet_name']}`  
+            - **Conta Vinculada:** `siti.pet01@gmail.com`  
+            - Todos os lançamentos, atendimentos e hospedagens estão sendo sincronizados continuamente com o seu Google Sheets na nuvem!
         """)
     else:
         st.info(f"""
             **{status_storage['status_label']}**  
-            - O aplicativo está funcionando normalmente com persistência local segura (`sitipet_db.json`).  
-            - Para sincronizar com a sua planilha do **Google Drive (`sitipet01@gmail.com`)**, siga as instruções abaixo.
+            - O aplicativo está funcionando com persistência local segura (`data/sitipet_db.json`).  
+            - Para salvar permanentemente na planilha do **Google Drive (`siti.pet01@gmail.com`)**, siga o passo a passo abaixo.
         """)
 
     # ==================== GUIA DE INTEGRAÇÃO GOOGLE SHEETS ====================
-    with st.expander("📖 **Como Conectar com a Planilha do Google Drive (sitipet01@gmail.com)**", expanded=not status_storage["is_google_sheets"]):
+    with st.expander("📖 **Passo a Passo: Como Conectar com o Google Sheets (siti.pet01@gmail.com)**", expanded=not status_storage["is_google_sheets"]):
         st.markdown("""
         ### Passo a Passo para Ativar a Planilha Google:
 
         1. **Acesse o Google Cloud Console:**
-           - Vá para [console.cloud.google.com](https://console.cloud.google.com) com a sua conta Google.
-           - Crie um projeto chamado **SitiPet**.
+           - Acesse [console.cloud.google.com](https://console.cloud.google.com) conectado na conta `siti.pet01@gmail.com`.
+           - Crie um novo projeto chamado **`SitiPet`**.
 
-        2. **Ative as APIs:**
-           - No menu **APIs e Serviços > Biblioteca**, pesquise e ative:
+        2. **Ative as 2 APIs necessárias:**
+           - No menu lateral, vá em **APIs e Serviços > Biblioteca**.
+           - Pesquise e clique em **Ativar** para:
              - **Google Sheets API**
              - **Google Drive API**
 
-        3. **Crie uma Conta de Serviço (Service Account):**
+        3. **Crie a Chave de Serviço (Service Account):**
            - Vá em **IAM e administração > Contas de serviço**.
-           - Clique em **Criar conta de serviço** (ex: `sitipet-bot`).
-           - Clique na conta criada > Aba **Chaves** > **Adicionar chave > Criar nova chave (JSON)**.
-           - Um arquivo `.json` será baixado no seu computador.
+           - Clique em **Criar conta de serviço** (ex: nome: `sitipet-bot`).
+           - Clique em **Concluir**.
+           - Clique no e-mail da conta de serviço criada > Vá na aba **Chaves** > **Adicionar chave > Criar nova chave (JSON)**.
+           - Um arquivo `.json` será baixado no seu computador com a chave secreta.
 
         4. **Crie a Planilha no Google Drive:**
-           - No seu Google Drive (`sitipet01@gmail.com`), crie uma nova planilha chamada **`SITIPET - Gestão`**.
-           - Clique no botão **Compartilhar** da planilha e adicione o e-mail da conta de serviço (o e-mail que termina em `@...iam.gserviceaccount.com`) como **Editor**.
+           - No seu Google Drive (`siti.pet01@gmail.com`), crie uma nova planilha chamada **`SITIPET - Gestão`**.
+           - Clique no botão **Compartilhar** da planilha.
+           - Cole o e-mail da conta de serviço (o e-mail que termina em `@...iam.gserviceaccount.com` que você criou no passo 3) e marque como **Editor**.
 
-        5. **Cole as Credenciais nos Secrets do Streamlit:**
-           - **Localmente:** Cole o conteúdo no arquivo `.streamlit/secrets.toml`.
-           - **No Streamlit Cloud:** No painel do seu app publicado, vá em **Settings > Secrets** e cole o modelo:
+        5. **Cole nos Secrets do Streamlit Cloud:**
+           - No painel do seu app no [share.streamlit.io](https://share.streamlit.io), clique em **Settings > Secrets**.
+           - Cole o modelo preenchido com os dados do seu arquivo JSON:
         """)
 
         st.code("""
 spreadsheet_name = "SITIPET - Gestão"
-google_account_email = "sitipet01@gmail.com"
+google_account_email = "siti.pet01@gmail.com"
 
 [gcp_service_account]
 type = "service_account"
@@ -71,7 +74,7 @@ project_id = "seu-projeto-gcp"
 private_key_id = "sua-key-id"
 private_key = "-----BEGIN PRIVATE KEY-----\\nMIIEvgIBADANBgk...\\n-----END PRIVATE KEY-----\\n"
 client_email = "sitipet-bot@seu-projeto-gcp.iam.gserviceaccount.com"
-client_id = "123456789"
+client_id = "1234567890"
 auth_uri = "https://accounts.google.com/o/oauth2/auth"
 token_uri = "https://oauth2.googleapis.com/token"
 auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
@@ -80,17 +83,16 @@ client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sitipe
 
     # ==================== GERENCIADOR DE TABELA DE PREÇOS ====================
     st.markdown("---")
-    st.markdown("### 🏷️ Tabela de Preços Padrão dos Serviços")
-    st.caption("Edite os valores padrão sugeridos nos formulários de Banho, Tosa e Hotel.")
+    st.markdown("### 🏷️ Tabela de Preços Oficial dos Serviços")
+    st.caption("Edite os valores padrão caso deseje alterar preços no futuro.")
 
     df_srv = load_table("Servicos_Precos")
     if not df_srv.empty:
-        # Editor de dados interativo do Streamlit
         edited_df = st.data_editor(
             df_srv,
             column_config={
                 "id": st.column_config.TextColumn("Código", disabled=True),
-                "categoria": st.column_config.SelectboxColumn("Categoria", options=["Tosa", "Banho", "Adicionais", "Hotel"]),
+                "categoria": st.column_config.SelectboxColumn("Categoria", options=["Banho", "Banho e Tosa Higiênica", "Tosa Pequeno", "Tosa Médio", "Tosa Grande", "Adicionais", "Hotel"]),
                 "nome": st.column_config.TextColumn("Nome do Serviço"),
                 "preco_padrao": st.column_config.NumberColumn("Preço Padrão (R$)", format="R$ %.2f", min_value=0.0, step=5.0),
                 "ativo": st.column_config.CheckboxColumn("Ativo?")
@@ -127,7 +129,6 @@ client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sitipe
             st.info("Arquivo de banco local não encontrado.")
 
     with col_bk2:
-        # Exportação em Excel com todas as abas
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
             for tbl in ["Agenda", "Banho_Tosa", "Hospedagem", "Caixa", "Servicos_Precos"]:

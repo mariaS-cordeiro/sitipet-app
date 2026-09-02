@@ -144,7 +144,7 @@ with st.sidebar:
     # Status de Conexão
     status_db = get_storage_status()
     st.caption(f"**Persistência:** {status_db['status_label']}")
-    st.caption("📧 Conta: `sitipet01@gmail.com`")
+    st.caption("📧 Conta: `siti.pet01@gmail.com`")
     st.caption("Versão: **SitiPet 2.0 Pro**")
 
 # ==================== RENDERIZAÇÃO DA VISÃO SELECIONADA ====================

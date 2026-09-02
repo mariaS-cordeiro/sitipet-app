@@ -1,44 +1,48 @@
 ﻿"""
 Visão: Aba 2 – Banho e Tosa - SitiPet
-Cadastro e gerenciamento completo dos serviços de banho, tosa e adicionais com cálculo automático.
+Cadastro e gerenciamento completo dos serviços de banho, tosa e adicionais com cálculo automático e emissão de notas.
 """
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 import uuid
-from utils.storage import load_table, insert_record, delete_record
+from utils.storage import load_table, insert_record, delete_record, PROFISSIONAIS
 from utils.datas import get_today_date, get_today_date_str, format_date_br
 from utils.financeiro import formatar_moeda
+from utils.comprovante import renderizar_modal_comprovante
 
-TOSAS_PADRAO = [
-    ("Tosa raspada", 60.0),
-    ("Tosa tamanho único", 70.0),
-    ("Tosa bebê", 80.0),
-    ("Tosa na tesoura", 90.0),
-    ("Tosa higiênica", 35.0),
-    ("Tosa da raça", 85.0),
-    ("Tosa completa", 95.0),
-    ("Aparagem", 40.0),
-    ("Desembolo", 30.0),
-    ("Outros tipos de tosa", 50.0)
-]
+# Preços base por porte
+PRECOS_BANHO = {
+    "Pequeno": 50.0,
+    "Médio": 70.0,
+    "Grande": 100.0,
+    "Gigante": 130.0
+}
 
-BANHOS_ADICIONAIS_PADRAO = [
-    ("Banho simples", 50.0),
-    ("Banho com hidratação", 75.0),
-    ("Banho medicamentoso", 65.0),
-    ("Corte de unhas", 15.0),
-    ("Limpeza de ouvidos", 15.0),
-    ("Escovação de dentes", 15.0),
-    ("Hidratação profunda", 30.0),
-    ("Desembolo extra", 35.0),
-    ("Outros serviços adicionais", 25.0)
+PRECOS_BANHO_TOSA_HIGIENICA = {
+    "Pequeno": 70.0,
+    "Médio": 90.0,
+    "Grande": 130.0,
+    "Gigante": 150.0
+}
+
+PRECOS_TOSA = {
+    "Pequeno": [("Tosa raspada", 80.0), ("Tosa bebê", 120.0), ("Tosa tamanho único", 100.0)],
+    "Médio": [("Tosa raspada", 100.0), ("Tosa bebê", 150.0), ("Tosa tamanho único", 130.0)],
+    "Grande": [("Tosa raspada", 130.0), ("Tosa bebê", 180.0), ("Tosa tamanho único", 150.0)],
+    "Gigante": [("Tosa raspada", 160.0), ("Tosa bebê", 210.0), ("Tosa tamanho único", 180.0)]
+}
+
+ADICIONAIS = [
+    ("Corte de unhas", 10.0),
+    ("Higienização de ouvidos", 10.0),
+    ("Higienização de boca", 10.0)
 ]
 
 def render_banho_tosa():
     st.markdown("## ✂️ Aba 2 – Banho e Tosa")
-    st.markdown("Cadastre e gerencie atendimentos de estética animal, combinando serviços com valores individuais e cálculo automático.")
+    st.markdown("Cadastre e gerencie atendimentos de estética animal com tabela de preços por porte, cálculo automático e emissão de comprovantes.")
 
     df_bt = load_table("Banho_Tosa")
 
@@ -53,8 +57,8 @@ def render_banho_tosa():
             tutor_nome = st.text_input("👤 Nome do Tutor *", key="bt_tutor_nome", placeholder="Ex: Marcelo Albuquerque")
             tutor_telefone = st.text_input("📱 Telefone / WhatsApp", key="bt_tutor_tel", placeholder="(11) 98888-7777")
         with col3:
-            porte = st.selectbox("Porte do Pet", ["Pequeno", "Médio", "Grande", "Gigante"], key="bt_porte")
-            profissional = st.selectbox("Profissional Responsável", ["Carlos (Tosa)", "Ana Paula (Banho)", "Mariana", "Outro"], key="bt_prof")
+            porte = st.selectbox("Porte do Pet *", ["Pequeno", "Médio", "Grande", "Gigante"], key="bt_porte")
+            profissional = st.selectbox("Profissional Responsável *", PROFISSIONAIS, key="bt_prof")
 
         col_d1, col_d2 = st.columns(2)
         with col_d1:
@@ -63,34 +67,48 @@ def render_banho_tosa():
             horario_atend = st.time_input("⏰ Horário", value=datetime.now().time(), key="bt_hora")
 
         st.markdown("---")
-        st.markdown("#### 2. Seleção de Serviços & Valores Individuais")
-        st.caption("Selecione um ou mais serviços de tosa, banho e adicionais. Os valores podem ser ajustados individualmente.")
+        st.markdown(f"#### 2. Seleção de Serviços para Porte: **{porte}**")
+        st.caption("Os valores são carregados automaticamente de acordo com a tabela oficial de preços da SitiPet.")
 
-        col_tosa, col_banho = st.columns(2)
+        col_banho, col_tosa, col_adic = st.columns(3)
 
         servicos_selecionados_com_valores = []
 
-        with col_tosa:
-            st.markdown("##### ✂️ Serviços de Tosa")
-            for nome_tosa, preco_sug in TOSAS_PADRAO:
-                col_chk, col_val = st.columns([3, 2])
-                with col_chk:
-                    sel = st.checkbox(nome_tosa, key=f"chk_tosa_{nome_tosa}")
-                with col_val:
-                    if sel:
-                        v = st.number_input(f"R$ ({nome_tosa})", min_value=0.0, value=float(preco_sug), step=5.0, key=f"val_tosa_{nome_tosa}", label_visibility="collapsed")
-                        servicos_selecionados_com_valores.append((nome_tosa, v))
-
+        # 1. BANHO & TOSA HIGIÊNICA
         with col_banho:
-            st.markdown("##### 🛁 Banho e Cuidados Adicionais")
-            for nome_banho, preco_sug in BANHOS_ADICIONAIS_PADRAO:
-                col_chk, col_val = st.columns([3, 2])
-                with col_chk:
-                    sel = st.checkbox(nome_banho, key=f"chk_banho_{nome_banho}")
-                with col_val:
-                    if sel:
-                        v = st.number_input(f"R$ ({nome_banho})", min_value=0.0, value=float(preco_sug), step=5.0, key=f"val_banho_{nome_banho}", label_visibility="collapsed")
-                        servicos_selecionados_com_valores.append((nome_banho, v))
+            st.markdown("##### 🛁 Banhos")
+            # Banho Simples
+            preco_banho_sug = PRECOS_BANHO.get(porte, 50.0)
+            sel_banho = st.checkbox(f"Banho ({formatar_moeda(preco_banho_sug)})", key=f"chk_banho_{porte}")
+            if sel_banho:
+                val_b = st.number_input(f"Valor Banho (R$)", min_value=0.0, value=float(preco_banho_sug), step=5.0, key=f"val_b_{porte}")
+                servicos_selecionados_com_valores.append((f"Banho ({porte})", val_b))
+
+            # Banho e Tosa Higiênica
+            preco_bth_sug = PRECOS_BANHO_TOSA_HIGIENICA.get(porte, 70.0)
+            sel_bth = st.checkbox(f"Banho e Tosa Higiênica ({formatar_moeda(preco_bth_sug)})", key=f"chk_bth_{porte}")
+            if sel_bth:
+                val_bth = st.number_input(f"Valor Banho + Tosa Hig. (R$)", min_value=0.0, value=float(preco_bth_sug), step=5.0, key=f"val_bth_{porte}")
+                servicos_selecionados_com_valores.append((f"Banho e Tosa Higiênica ({porte})", val_bth))
+
+        # 2. TOSAS COMPLETAS POR PORTE
+        with col_tosa:
+            st.markdown(f"##### ✂️ Tosas ({porte})")
+            lista_tosas = PRECOS_TOSA.get(porte, PRECOS_TOSA["Pequeno"])
+            for nome_tosa, preco_sug in lista_tosas:
+                sel_t = st.checkbox(f"{nome_tosa} ({formatar_moeda(preco_sug)})", key=f"chk_t_{porte}_{nome_tosa}")
+                if sel_t:
+                    val_t = st.number_input(f"Valor {nome_tosa} (R$)", min_value=0.0, value=float(preco_sug), step=5.0, key=f"val_t_{porte}_{nome_tosa}")
+                    servicos_selecionados_com_valores.append((f"{nome_tosa} ({porte})", val_t))
+
+        # 3. CUIDADOS ADICIONAIS (R$ 10,00)
+        with col_adic:
+            st.markdown("##### 💅 Cuidados Adicionais")
+            for nome_adic, preco_adic in ADICIONAIS:
+                sel_ad = st.checkbox(f"{nome_adic} ({formatar_moeda(preco_adic)})", key=f"chk_ad_{nome_adic}")
+                if sel_ad:
+                    val_ad = st.number_input(f"Valor {nome_adic} (R$)", min_value=0.0, value=float(preco_adic), step=2.0, key=f"val_ad_{nome_adic}")
+                    servicos_selecionados_com_valores.append((nome_adic, val_ad))
 
         # Cálculo Total
         valor_total_calculado = sum(v for _, v in servicos_selecionados_com_valores)
@@ -111,15 +129,15 @@ def render_banho_tosa():
             forma_pag = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro", "Pendente"], key="bt_formapag")
         
         with col_tot3:
-            lancar_caixa = st.checkbox("💰 Lançar automaticamente no Caixa", value=True, help="Se marcado, cria o registro de entrada financeira imediatamente.")
+            lancar_caixa = st.checkbox("💰 Lançar automaticamente no Caixa", value=True)
 
-        observacoes = st.text_area("📝 Observações do Atendimento", placeholder="Ex: Pet apresentou nós nas orelhas, necessitou desembolo cuidadoso...", key="bt_obs")
+        observacoes = st.text_area("📝 Observações do Atendimento", placeholder="Ex: Pet tranquilo, pelagem hidratada...", key="bt_obs")
 
         if st.button("💾 Salvar Atendimento em Banho e Tosa", type="primary", use_container_width=True):
             if not pet_nome or not tutor_nome:
-                st.error("Por favor, preencha os campos obrigatórios (Nome do Pet e Nome do Tutor).")
+                st.error("Por favor, preencha o Nome do Pet e o Nome do Tutor.")
             elif not servicos_selecionados_com_valores:
-                st.error("Por favor, selecione pelo menos 1 serviço de banho ou tosa.")
+                st.error("Por favor, selecione pelo menos 1 serviço.")
             else:
                 desc_servicos = ", ".join([f"{n} ({formatar_moeda(v)})" for n, v in servicos_selecionados_com_valores])
                 rec_id = f"BT-{str(uuid.uuid4())[:6].upper()}"
@@ -154,7 +172,7 @@ def render_banho_tosa():
                         "valor": float(valor_total_calculado),
                         "forma_pagamento": forma_pag,
                         "referencia_id": rec_id,
-                        "observacao": desc_servicos,
+                        "observacao": f"{desc_servicos} | Profissional: {profissional}",
                         "criado_em": get_today_date_str()
                     }
                     insert_record("Caixa", cx_reg)
@@ -187,9 +205,7 @@ def render_banho_tosa():
     if filtro_porte != "Todos":
         df_filtrado = df_filtrado[df_filtrado["porte"] == filtro_porte]
 
-    # Ordenar por data decrescente
     df_filtrado = df_filtrado.sort_values(by=["data", "horario"], ascending=[False, False])
-
     st.caption(f"Mostrando **{len(df_filtrado)}** registro(s)")
 
     for _, row in df_filtrado.iterrows():
@@ -201,8 +217,8 @@ def render_banho_tosa():
         porte = row.get("porte")
         data_s = row.get("data")
         hora_s = row.get("horario")
-        prof = row.get("profissional")
-        servs = row.get("servicos_detalhados")
+        prof = row.get("profissional", "Silvaneidy (Groomer)")
+        servs = row.get("servicos_detalhados", "")
         val = float(row.get("valor_total", 0.0))
         status_pag = row.get("status_pagamento", "Pago")
         obs = row.get("observacoes", "")
@@ -229,8 +245,32 @@ def render_banho_tosa():
                 </div>
             """, unsafe_allow_html=True)
             
-            col_act1, col_act2 = st.columns([5, 1])
+            col_act1, col_act2, col_act3 = st.columns([3, 2, 1])
             with col_act2:
-                if st.button("🗑️ Excluir", key=f"del_bt_{rec_id}", help="Excluir este atendimento"):
+                with st.popover("🖨️ Imprimir Nota / Comprovante", use_container_width=True):
+                    itens_rec = []
+                    for pedaco in servs.split(","):
+                        p = pedaco.strip()
+                        if p:
+                            itens_rec.append({"nome": p, "valor": val / max(1, len(servs.split(",")))})
+                    
+                    renderizar_modal_comprovante(
+                        titulo="Nota de Banho e Tosa",
+                        cliente_nome=tutor,
+                        cliente_telefone=tel,
+                        pet_nome=pet,
+                        raca=raca,
+                        porte=porte,
+                        profissional=prof,
+                        data_servico=data_s,
+                        itens=itens_rec,
+                        valor_total=val,
+                        forma_pagamento=status_pag,
+                        observacoes=obs,
+                        codigo_recibo=str(rec_id)
+                    )
+
+            with col_act3:
+                if st.button("🗑️", key=f"del_bt_{rec_id}", help="Excluir este atendimento"):
                     delete_record("Banho_Tosa", rec_id)
                     st.rerun()

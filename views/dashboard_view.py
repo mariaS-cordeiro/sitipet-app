@@ -1,4 +1,4 @@
-"""
+﻿"""
 Visão: Dashboard / Painel Geral - SitiPet
 Apresenta indicadores rápidos de gestão, alertas de atendimento e visão panorâmica.
 """
@@ -145,6 +145,7 @@ def render_dashboard(set_page_callback=None):
     with col_ag:
         st.markdown("### 📋 Compromissos de Hoje na Agenda")
         if not df_agenda_hoje.empty:
+            # Ordenar por horário
             df_agenda_hoje_sorted = df_agenda_hoje.sort_values(by="horario")
             
             for _, r in df_agenda_hoje_sorted.iterrows():
