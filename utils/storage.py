@@ -110,6 +110,9 @@ def get_initial_sample_data() -> dict:
                 "servicos_detalhados": "Banho e Tosa Higiênica (Pequeno) (R$ 70,00)",
                 "valor_total": 70.0,
                 "status_pagamento": "Pago (Pix)",
+                "lembrete_dias": 15,
+                "data_proximo_banho": hoje,
+                "lembrete_status": "Pendente",
                 "observacoes": "Pelagem escovada",
                 "criado_em": hoje
             }
@@ -201,7 +204,6 @@ def get_spreadsheet():
         return spreadsheet, None
     except Exception:
         try:
-            # Tentar criar a planilha e compartilhar com siti.pet01@gmail.com
             spreadsheet = client.create(sheet_name)
             target_email = st.secrets.get("google_account_email", "siti.pet01@gmail.com")
             spreadsheet.share(target_email, perm_type="user", role="writer")
@@ -252,7 +254,6 @@ def _load_local_db() -> dict:
     try:
         with open(LOCAL_DB_PATH, "r", encoding="utf-8") as f:
             db = json.load(f)
-            # Garantir que tabela de preços tenha os novos serviços
             if "Servicos_Precos" not in db or len(db.get("Servicos_Precos", [])) < 15:
                 db["Servicos_Precos"] = DEFAULT_SERVICOS
                 _save_local_db(db)
@@ -269,7 +270,6 @@ def _save_local_db(db: dict):
 
 def load_table(table_name: str) -> pd.DataFrame:
     """Carrega uma tabela do Google Sheets ou do Local DB."""
-    # Tentar via Google Sheets se disponível
     client, _ = get_google_sheets_client()
     if client:
         spreadsheet, _ = get_spreadsheet()
@@ -278,7 +278,6 @@ def load_table(table_name: str) -> pd.DataFrame:
                 try:
                     worksheet = spreadsheet.worksheet(table_name)
                 except Exception:
-                    # Criar aba se não existir
                     worksheet = spreadsheet.add_worksheet(title=table_name, rows="500", cols="25")
                     db_local = _load_local_db()
                     initial_rows = db_local.get(table_name, [])
@@ -293,20 +292,17 @@ def load_table(table_name: str) -> pd.DataFrame:
             except Exception:
                 pass
 
-    # Fallback Local
     db = _load_local_db()
     rows = db.get(table_name, [])
     return pd.DataFrame(rows)
 
 def save_table(table_name: str, df: pd.DataFrame):
     """Salva o DataFrame completo na tabela (Google Sheets e Local)."""
-    # 1. Salvar no Local DB
     db = _load_local_db()
     df_clean = df.fillna("")
     db[table_name] = df_clean.to_dict(orient="records")
     _save_local_db(db)
 
-    # 2. Salvar no Google Sheets se conectado
     client, _ = get_google_sheets_client()
     if client:
         spreadsheet, _ = get_spreadsheet()
@@ -372,7 +368,80 @@ def delete_record(table_name: str, record_id: str) -> bool:
     save_table(table_name, df_filtrado)
     return True
 
-# ==================== FLUXOS INTEGRADOS AUTOMÁTICOS ====================
+# ==================== FLUXOS INTEGRADOS AUTOMÁTICOS COM O CAIXA ====================
+
+def lancar_ou_atualizar_hospedagem_caixa(
+    hospedagem_id: str,
+    valor: float,
+    forma_pagamento: str,
+    descricao: str,
+    data_lancamento: str = None,
+    observacao: str = ""
+) -> str:
+    """
+    Garante que a hospedagem seja contabilizada corretamente no Caixa:
+    - Se já existir lançamento vinculado a essa hospedagem (referencia_id == hospedagem_id), atualiza o valor e forma de pagamento.
+    - Se não existir, cria uma nova Entrada financeira no Caixa.
+    """
+    df_caixa = load_table("Caixa")
+    dt = data_lancamento or get_today_date_str()
+    val_num = float(valor) if valor is not None else 0.0
+
+    if not df_caixa.empty and "referencia_id" in df_caixa.columns:
+        match = df_caixa[df_caixa["referencia_id"].astype(str) == str(hospedagem_id)]
+        if not match.empty:
+            cx_id = match.iloc[0]["id"]
+            update_record("Caixa", cx_id, {
+                "valor": val_num,
+                "forma_pagamento": forma_pagamento,
+                "descricao": descricao,
+                "data": dt,
+                "observacao": observacao
+            })
+            return str(cx_id)
+
+    # Não existe no Caixa ainda -> Criar nova entrada
+    novo_cx_id = f"CX-{str(uuid.uuid4())[:6].upper()}"
+    novo_cx = {
+        "id": novo_cx_id,
+        "data": dt,
+        "tipo": "Entrada",
+        "categoria": "Hospedagem",
+        "servico_relacionado": "Hospedagem",
+        "descricao": descricao,
+        "valor": val_num,
+        "forma_pagamento": forma_pagamento,
+        "referencia_id": str(hospedagem_id),
+        "observacao": observacao,
+        "criado_em": get_today_date_str()
+    }
+    insert_record("Caixa", novo_cx)
+    return novo_cx_id
+
+def verificar_hospedagem_no_caixa(hospedagem_id: str) -> dict:
+    """Verifica se a hospedagem já foi lançada no Caixa e retorna os detalhes."""
+    df_caixa = load_table("Caixa")
+    if not df_caixa.empty and "referencia_id" in df_caixa.columns:
+        match = df_caixa[df_caixa["referencia_id"].astype(str) == str(hospedagem_id)]
+        if not match.empty:
+            item = match.iloc[0]
+            return {
+                "lancado": True,
+                "caixa_id": item.get("id"),
+                "valor": float(item.get("valor", 0.0)),
+                "forma_pagamento": item.get("forma_pagamento")
+            }
+    return {"lancado": False, "caixa_id": None, "valor": 0.0, "forma_pagamento": ""}
+
+def excluir_hospedagem_e_caixa(hospedagem_id: str, excluir_tambem_caixa: bool = True):
+    """Exclui a hospedagem e opcionalmente o lançamento vinculado no Caixa."""
+    delete_record("Hospedagem", hospedagem_id)
+    if excluir_tambem_caixa:
+        df_caixa = load_table("Caixa")
+        if not df_caixa.empty and "referencia_id" in df_caixa.columns:
+            match = df_caixa[df_caixa["referencia_id"].astype(str) == str(hospedagem_id)]
+            for _, r in match.iterrows():
+                delete_record("Caixa", r.get("id"))
 
 def concluir_atendimento_agenda(
     agenda_id: str,
@@ -380,12 +449,7 @@ def concluir_atendimento_agenda(
     criar_registro_banho_tosa: bool = True,
     criar_registro_caixa: bool = True
 ) -> bool:
-    """
-    Fluxo Integrado 1:
-    - Marca o agendamento como 'Finalizado' na Agenda
-    - Insere no histórico de Banho e Tosa
-    - Lança automaticamente a receita no Caixa
-    """
+    """Fluxo Integrado 1: Conclui agenda, registra em Banho/Tosa e lança no Caixa."""
     df_agenda = load_table("Agenda")
     if df_agenda.empty:
         return False
@@ -395,11 +459,8 @@ def concluir_atendimento_agenda(
         return False
     
     item = reg_list[0]
-    
-    # 1. Atualizar Agenda
     update_record("Agenda", agenda_id, {"status": "Finalizado"})
     
-    # 2. Inserir em Banho e Tosa se solicitado
     if criar_registro_banho_tosa:
         bt_record = {
             "id": f"BT-{str(uuid.uuid4())[:6].upper()}",
@@ -414,12 +475,14 @@ def concluir_atendimento_agenda(
             "servicos_detalhados": item.get("servicos", "Banho e Tosa"),
             "valor_total": float(item.get("valor_total", 0.0)),
             "status_pagamento": f"Pago ({forma_pagamento})",
+            "lembrete_dias": 15,
+            "data_proximo_banho": get_today_date_str(),
+            "lembrete_status": "Pendente",
             "observacoes": f"Finalizado da Agenda. Obs: {item.get('observacoes', '')}",
             "criado_em": get_today_date_str()
         }
         insert_record("Banho_Tosa", bt_record)
 
-    # 3. Inserir no Caixa
     if criar_registro_caixa:
         valor = float(item.get("valor_total", 0.0))
         if valor > 0:
@@ -446,11 +509,7 @@ def concluir_hospedagem(
     valor_adicionais: float = 0.0,
     criar_registro_caixa: bool = True
 ) -> bool:
-    """
-    Fluxo Integrado 2:
-    - Realiza check-out do pet na Hospedagem (muda status para 'Concluído')
-    - Lança o valor total (diárias + adicionais) no Caixa
-    """
+    """Fluxo Integrado 2: Realiza check-out do pet na Hospedagem e atualiza/lança no Caixa."""
     df_hosp = load_table("Hospedagem")
     if df_hosp.empty:
         return False
@@ -460,33 +519,23 @@ def concluir_hospedagem(
         return False
     
     item = reg_list[0]
-    
+    valor_base = float(item.get("valor_total", 0.0))
+    valor_final = valor_base + float(valor_adicionais)
+
     # 1. Atualizar Hospedagem
     update_record("Hospedagem", hospedagem_id, {
         "status": "Concluído",
+        "valor_total": float(valor_final),
         "data_saida_real": get_today_date_str(),
         "forma_pagamento": forma_pagamento
     })
     
-    # 2. Inserir no Caixa
-    if criar_registro_caixa:
-        valor_base = float(item.get("valor_total", 0.0))
-        valor_final = valor_base + float(valor_adicionais)
-        
-        if valor_final > 0:
-            cx_record = {
-                "id": f"CX-{str(uuid.uuid4())[:6].upper()}",
-                "data": get_today_date_str(),
-                "tipo": "Entrada",
-                "categoria": "Hospedagem",
-                "servico_relacionado": "Hospedagem",
-                "descricao": f"Check-out Hotel {item.get('pet_nome', '')} ({item.get('diarias', 1)} diárias) - Tutor(a) {item.get('tutor_nome', '')}",
-                "valor": valor_final,
-                "forma_pagamento": forma_pagamento,
-                "referencia_id": str(hospedagem_id),
-                "observacao": f"Entrada: {item.get('data_entrada')} | Saída: {item.get('data_saida')}",
-                "criado_em": get_today_date_str()
-            }
-            insert_record("Caixa", cx_record)
+    # 2. Lançar / Atualizar no Caixa
+    if criar_registro_caixa and valor_final > 0:
+        desc = f"Check-out Hotel {item.get('pet_nome', '')} ({item.get('diarias', 1)} diárias) - Tutor: {item.get('tutor_nome', '')}"
+        obs = f"Entrada: {item.get('data_entrada')} | Saída: {item.get('data_saida')}"
+        if valor_adicionais > 0:
+            obs += f" | Adicionais: {formatar_moeda(valor_adicionais)}"
+        lancar_ou_atualizar_hospedagem_caixa(hospedagem_id, valor_final, forma_pagamento, desc, observacao=obs)
             
     return True
