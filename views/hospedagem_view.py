@@ -1,20 +1,25 @@
 ﻿"""
 Visão: Aba 3 – Hospedagem / Hotelzinho - SitiPet
-Controle de check-in, check-out, cálculo de diárias, edição completa de estadias e emissão de recibos.
+Controle de check-in, check-out, cálculo de diárias, edição e exclusão completas em todas as abas,
+e integração financeira automática em tempo real com o Fluxo de Caixa.
 """
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta
 import uuid
-from utils.storage import load_table, insert_record, update_record, delete_record, concluir_hospedagem
+from utils.storage import (
+    load_table, insert_record, update_record, delete_record,
+    concluir_hospedagem, lancar_ou_atualizar_hospedagem_caixa,
+    verificar_hospedagem_no_caixa, excluir_hospedagem_e_caixa
+)
 from utils.datas import get_today_date, get_today_date_str, format_date_br, calc_dias_hospedagem, parse_date
 from utils.financeiro import formatar_moeda
 from utils.comprovante import renderizar_modal_comprovante
 
 def render_hospedagem():
     st.markdown("## 🏨 Aba 3 – Hospedagem / Hotelzinho SitiPet")
-    st.markdown("Gestão de estadias, edição de dados, cálculo de diárias (R$ 80,00), controle de cuidados e recibos de hospedagem.")
+    st.markdown("Gestão de estadias, edição e exclusão de registros, diárias automáticas (R$ 80,00), emissão de recibos e integração financeira com o Caixa.")
 
     df_hosp = load_table("Hospedagem")
     preco_diaria_padrao = 80.0
@@ -54,11 +59,13 @@ def render_hospedagem():
                 </div>
             """, unsafe_allow_html=True)
 
-        col_f1, col_f2 = st.columns(2)
+        col_f1, col_f2, col_f3 = st.columns([2, 2, 2])
         with col_f1:
-            forma_pag = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro", "Pagar no Check-out"], key="hsp_formapag")
+            forma_pag = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro", "Pendente / Check-out"], key="hsp_formapag")
         with col_f2:
             status_inicial = st.selectbox("Status da Hospedagem", ["Hospedado", "Reservado", "Concluído"], key="hsp_status")
+        with col_f3:
+            lancar_no_caixa_inicial = st.checkbox("💰 Lançar no Fluxo de Caixa agora", value=True, help="Registra imediatamente a receita de hospedagem no Caixa.")
 
         st.markdown("#### 3. Ficha de Cuidados & Informações Importantes")
         col_c1, col_c2 = st.columns(2)
@@ -103,12 +110,22 @@ def render_hospedagem():
                     "criado_em": get_today_date_str()
                 }
                 insert_record("Hospedagem", novo_hosp)
+
+                # Integração com o Caixa
+                if lancar_no_caixa_inicial and valor_total_calc > 0 and forma_pag != "Pendente / Check-out":
+                    desc_cx = f"Hospedagem {pet_nome.strip()} ({diarias_calc} diárias) - Tutor: {tutor_nome.strip()}"
+                    obs_cx = f"Entrada: {format_date_br(data_entrada)} | Saída: {format_date_br(data_saida)}"
+                    lancar_ou_atualizar_hospedagem_caixa(hosp_id, valor_total_calc, forma_pag, desc_cx, observacao=obs_cx)
+
                 st.success(f"✅ Hospedagem de **{pet_nome}** registrada com sucesso! Total: **{formatar_moeda(valor_total_calc)}** ({diarias_calc} diárias).")
                 st.rerun()
 
     # ==================== PAINEL DE VISUALIZAÇÃO EM ABAS ====================
     st.markdown("---")
-    tab_ativos, tab_historico = st.tabs(["🏨 **Animais Atualmente Hospedados**", "📚 **Histórico Geral de Hospedagens**"])
+    tab_ativos, tab_historico = st.tabs([
+        "🏨 **Animais Atualmente Hospedados**",
+        "📋 **Histórico Geral de Hospedagens & Edição**"
+    ])
 
     hoje_str = get_today_date_str()
     d_hoje = date.today()
@@ -137,6 +154,10 @@ def render_hospedagem():
                     val_tot = float(row.get("valor_total", 0.0))
                     forma_pag = row.get("forma_pagamento", "Pendente")
                     
+                    # Status no Caixa
+                    info_cx = verificar_hospedagem_no_caixa(h_id)
+                    cx_badge = "🟢 <b>Caixa:</b> Lançado" if info_cx["lancado"] else "🟠 <b>Caixa:</b> Pendente de lançamento"
+
                     d_out_obj = parse_date(dt_out)
                     is_checkout_hoje = (d_out_obj == d_hoje)
                     is_checkout_atrasado = (d_out_obj < d_hoje)
@@ -169,7 +190,8 @@ def render_hospedagem():
                             <div style="margin-top: 10px; font-size: 13px; color: #334155; line-height: 1.6;">
                                 📅 <b>Período:</b> {format_date_br(dt_in)} até <b>{format_date_br(dt_out)}</b> &nbsp;|&nbsp; 
                                 💵 <b>Diária:</b> {formatar_moeda(val_diaria)} &nbsp;|&nbsp; 
-                                💰 <b>Total Previsto:</b> <span style="font-weight: 700; color: #10b981;">{formatar_moeda(val_tot)}</span>
+                                💰 <b>Total:</b> <span style="font-weight: 700; color: #10b981;">{formatar_moeda(val_tot)}</span> ({forma_pag}) &nbsp;|&nbsp;
+                                <span style="font-size: 12px;">{cx_badge}</span>
                             </div>
 
                             <div style="background: #f8fafc; border-radius: 8px; padding: 10px 14px; margin-top: 10px; font-size: 12px; color: #475569; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
@@ -181,26 +203,26 @@ def render_hospedagem():
                         </div>
                     """, unsafe_allow_html=True)
 
-                    col_chk1, col_chk2, col_chk3, col_chk4 = st.columns([3, 2, 2, 1])
+                    col_chk1, col_chk2, col_chk3, col_chk4, col_chk5 = st.columns([3, 2, 2, 2, 1])
                     
                     # 1. CHECK-OUT
                     with col_chk1:
                         with st.popover(f"🏁 Check-out {pet}", use_container_width=True):
-                            st.markdown(f"#### Check-out do Hóspede {pet}")
+                            st.markdown(f"#### Check-out do Hóspede **{pet}**")
                             st.write(f"Valor Base ({diarias} diárias): **{formatar_moeda(val_tot)}**")
                             
                             val_extras = st.number_input("Adicionais / Consumo Extra (R$)", min_value=0.0, value=0.0, step=10.0, key=f"extra_{h_id}")
                             tot_final = val_tot + val_extras
                             st.markdown(f"**Valor Final:** <span style='color: #10b981; font-size: 18px; font-weight: 800;'>{formatar_moeda(tot_final)}</span>", unsafe_allow_html=True)
                             
-                            fp = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro"], key=f"fp_out_{h_id}")
+                            fp_out = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro"], key=f"fp_out_{h_id}")
                             
                             if st.button("Confirmar Check-out & Lançar no Caixa", key=f"btn_out_{h_id}", type="primary"):
-                                concluir_hospedagem(h_id, forma_pagamento=fp, valor_adicionais=val_extras)
-                                st.success(f"Check-out de {pet} concluído!")
+                                concluir_hospedagem(h_id, forma_pagamento=fp_out, valor_adicionais=val_extras)
+                                st.success(f"Check-out de {pet} concluído e lançado no Caixa!")
                                 st.rerun()
 
-                    # 2. EDITAR HOSPEDAGEM
+                    # 2. EDITAR HOSPEDAGEM (HÓSPEDES ATUAIS)
                     with col_chk2:
                         with st.popover("✏️ Editar", use_container_width=True):
                             st.markdown(f"#### ✏️ Editar Hospedagem: **{pet}**")
@@ -220,13 +242,19 @@ def render_hospedagem():
                             with col_eh3:
                                 eh_val_dia = st.number_input("Valor Diária (R$)", min_value=0.0, value=float(val_diaria), step=5.0, key=f"eh_vdia_{h_id}")
                             with col_eh4:
-                                eh_st = st.selectbox("Status", ["Hospedado", "Reservado", "Concluído"], index=["Hospedado", "Reservado", "Concluído"].index(row.get("status", "Hospedado")) if row.get("status") in ["Hospedado", "Reservado", "Concluído"] else 0, key=f"eh_st_{h_id}")
+                                st_lista = ["Hospedado", "Reservado", "Concluído"]
+                                eh_st_idx = st_lista.index(row.get("status", "Hospedado")) if row.get("status") in st_lista else 0
+                                eh_st = st.selectbox("Status", st_lista, index=eh_st_idx, key=f"eh_st_{h_id}")
 
                             eh_tot_calc = float(eh_diarias_calc * eh_val_dia)
+                            eh_fp = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro", "Pendente / Check-out"], key=f"eh_fp_{h_id}")
+                            
+                            eh_sync_cx = st.checkbox("💰 Atualizar / Sincronizar no Caixa", value=True, key=f"eh_sync_cx_{h_id}")
+
                             eh_alim = st.text_input("Alimentação / Ração", value=str(row.get("alimentacao", "")), key=f"eh_alim_{h_id}")
                             eh_med = st.text_input("Medicação", value=str(row.get("medicacao", "")), key=f"eh_med_{h_id}")
                             eh_comp = st.text_input("Comportamento", value=str(row.get("comportamento", "")), key=f"eh_comp_{h_id}")
-                            eh_emerg = st.text_input("Emergência", value=str(row.get("contato_emergencia", "")), key=f"eh_em_{h_id}")
+                            eh_emerg = st.text_input("Contato Emergência", value=str(row.get("contato_emergencia", "")), key=f"eh_em_{h_id}")
                             eh_obs = st.text_input("Observações", value=str(row.get("observacoes", "")), key=f"eh_obs_{h_id}")
 
                             if st.button("💾 Salvar Alterações", key=f"btn_save_eh_{h_id}", type="primary"):
@@ -239,6 +267,7 @@ def render_hospedagem():
                                     "diarias": int(eh_diarias_calc),
                                     "valor_diaria": float(eh_val_dia),
                                     "valor_total": float(eh_tot_calc),
+                                    "forma_pagamento": eh_fp,
                                     "status": eh_st,
                                     "alimentacao": eh_alim.strip(),
                                     "medicacao": eh_med.strip(),
@@ -246,11 +275,26 @@ def render_hospedagem():
                                     "contato_emergencia": eh_emerg.strip(),
                                     "observacoes": eh_obs.strip()
                                 })
-                                st.success("Hospedagem atualizada!")
+                                if eh_sync_cx and eh_tot_calc > 0 and eh_fp != "Pendente / Check-out":
+                                    desc_sync = f"Hospedagem {eh_pet.strip()} ({eh_diarias_calc} diárias) - Tutor: {eh_tutor.strip()}"
+                                    lancar_ou_atualizar_hospedagem_caixa(h_id, eh_tot_calc, eh_fp, desc_sync)
+                                st.success("Hospedagem atualizada com sucesso!")
                                 st.rerun()
 
-                    # 3. RECIBO
+                    # 3. LANÇAR NO CAIXA (DIRETO)
                     with col_chk3:
+                        with st.popover("💰 Caixa", use_container_width=True):
+                            st.markdown(f"**Lançar Hospedagem no Caixa**")
+                            st.write(f"Pet: **{pet}** | Valor: **{formatar_moeda(val_tot)}**")
+                            cx_fp_dir = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro"], key=f"cxfp_dir_{h_id}")
+                            if st.button("Confirmar Lançamento no Caixa", key=f"btn_cxfp_dir_{h_id}", type="primary"):
+                                desc_d = f"Hospedagem {pet} ({diarias} diárias) - Tutor: {tutor}"
+                                lancar_ou_atualizar_hospedagem_caixa(h_id, val_tot, cx_fp_dir, desc_d)
+                                st.success("Lançamento efetuado no Caixa com sucesso!")
+                                st.rerun()
+
+                    # 4. RECIBO
+                    with col_chk4:
                         with st.popover("🖨️ Recibo", use_container_width=True):
                             renderizar_modal_comprovante(
                                 titulo="Recibo de Hospedagem / Hotelzinho",
@@ -268,15 +312,20 @@ def render_hospedagem():
                                 codigo_recibo=str(h_id)
                             )
 
-                    # 4. EXCLUIR
-                    with col_chk4:
-                        if st.button("🗑️", key=f"del_hsp_{h_id}", help="Excluir hospedagem"):
-                            delete_record("Hospedagem", h_id)
-                            st.rerun()
+                    # 5. EXCLUIR HOSPEDAGEM (HÓSPEDES ATUAIS)
+                    with col_chk5:
+                        with st.popover("🗑️", use_container_width=True):
+                            st.warning(f"Excluir hospedagem de **{pet}**?")
+                            del_cx_check = st.checkbox("Excluir também do Caixa", value=True, key=f"del_cx_chk_{h_id}")
+                            if st.button("Sim, Excluir", key=f"btn_conf_del_{h_id}", type="secondary"):
+                                excluir_hospedagem_e_caixa(h_id, excluir_tambem_caixa=del_cx_check)
+                                st.success("Hospedagem excluída.")
+                                st.rerun()
 
-    # ------------------ TAB 2: HISTÓRICO GERAL ------------------
+    # ------------------ TAB 2: HISTÓRICO GERAL COM EDIÇÃO E EXCLUSÃO COMPLETAS ------------------
     with tab_historico:
         st.markdown("### 📋 Todas as Estadias e Reservas")
+        st.caption("Consulte o histórico completo, edite dados, sincronize com o Caixa ou exclua estadias antigas.")
         
         if not df_hosp.empty:
             col_hf1, col_hf2 = st.columns([3, 2])
@@ -296,27 +345,140 @@ def render_hospedagem():
                 df_h_show = df_h_show[df_h_show["status"] == st_filtro]
 
             df_h_show = df_h_show.sort_values(by="data_entrada", ascending=False)
-            st.caption(f"Mostrando **{len(df_h_show)}** registro(s)")
+            st.caption(f"Mostrando **{len(df_h_show)}** estadia(s)")
             
             for _, r in df_h_show.iterrows():
-                h_id = r.get("id")
+                h_id_h = r.get("id")
                 pet_h = r.get("pet_nome", "")
                 tut_h = r.get("tutor_nome", "")
                 tel_h = r.get("tutor_telefone", "")
                 dt_in_h = r.get("data_entrada", "")
                 dt_out_h = r.get("data_saida", "")
-                st_cor = "#10b981" if r.get("status") == "Concluído" else "#f59e0b" if r.get("status") == "Hospedado" else "#64748b"
+                diarias_h = int(r.get("diarias", 1))
+                val_dia_h = float(r.get("valor_diaria", 80.0))
+                val_tot_h = float(r.get("valor_total", 0.0))
+                fp_h = r.get("forma_pagamento", "Pix")
+                status_h = r.get("status", "Hospedado")
+
+                # Info no Caixa
+                info_cxh = verificar_hospedagem_no_caixa(h_id_h)
+                cx_badge_h = "🟢 <b>Caixa:</b> Lançado" if info_cxh["lancado"] else "🟠 <b>Caixa:</b> Não lançado"
+                st_cor = "#10b981" if status_h == "Concluído" else "#f59e0b" if status_h == "Hospedado" else "#64748b"
                 
-                st.markdown(f"""
-                    <div style="background: white; border-radius: 10px; padding: 12px 18px; margin-bottom: 8px; border-left: 4px solid {st_cor}; box-shadow: 0 1px 5px rgba(0,0,0,0.03);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <b>🐕 {pet_h}</b> (Tutor: {tut_h})
-                            <span style="font-weight: 700; color: {st_cor};">{r.get('status')}</span>
+                with st.container():
+                    st.markdown(f"""
+                        <div style="background: white; border-radius: 12px; padding: 14px 18px; margin-bottom: 10px; border-left: 5px solid {st_cor}; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                                <div>
+                                    <span style="font-size: 16px; font-weight: 800; color: #1e293b;">🐕 {pet_h}</span>
+                                    <span style="color: #64748b; font-size: 13px;"> | Tutor: <b>{tut_h}</b> ({tel_h})</span>
+                                </div>
+                                <div>
+                                    <span style="background: {st_cor}20; color: {st_cor}; padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 12px;">
+                                        {status_h} • {diarias_h} diária(s)
+                                    </span>
+                                </div>
+                            </div>
+                            <div style="font-size: 13px; color: #334155; margin-top: 6px;">
+                                📅 <b>Período:</b> {format_date_br(dt_in_h)} até {format_date_br(dt_out_h)} &nbsp;|&nbsp; 
+                                💵 <b>Diária:</b> {formatar_moeda(val_dia_h)} &nbsp;|&nbsp; 
+                                💰 <b>Total:</b> <span style="font-weight: 700; color: #10b981;">{formatar_moeda(val_tot_h)}</span> ({fp_h}) &nbsp;|&nbsp; 
+                                <span style="font-size: 12px;">{cx_badge_h}</span>
+                            </div>
                         </div>
-                        <div style="font-size: 12px; color: #475569; margin-top: 4px;">
-                            📅 Entrada: {format_date_br(dt_in_h)} | Saída: {format_date_br(dt_out_h)} | Diárias: {r.get('diarias')} | Total: <b>{formatar_moeda(r.get('valor_total'))}</b> ({r.get('forma_pagamento')})
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+
+                    col_hb1, col_hb2, col_hb3, col_hb4 = st.columns([2, 2, 2, 1])
+
+                    # 1. EDITAR NO HISTÓRICO
+                    with col_hb1:
+                        with st.popover("✏️ Editar Estadia", use_container_width=True):
+                            st.markdown(f"#### ✏️ Editar Estadia: **{pet_h}**")
+                            eh_pet_t = st.text_input("Nome do Pet", value=str(pet_h), key=f"eht_pet_{h_id_h}")
+                            eh_tut_t = st.text_input("Nome do Tutor", value=str(tut_h), key=f"eht_tut_{h_id_h}")
+                            eh_tel_t = st.text_input("Telefone", value=str(tel_h), key=f"eht_tel_{h_id_h}")
+                            
+                            col_eht1, col_eht2 = st.columns(2)
+                            with col_eht1:
+                                eh_dtin_t = st.date_input("Data Entrada", value=parse_date(dt_in_h), key=f"eht_dtin_{h_id_h}")
+                            with col_eht2:
+                                eh_dtout_t = st.date_input("Data Saída", value=parse_date(dt_out_h), key=f"eht_dtout_{h_id_h}")
+
+                            eh_dias_calc_t = calc_dias_hospedagem(eh_dtin_t, eh_dtout_t)
+                            
+                            col_eht3, col_eht4 = st.columns(2)
+                            with col_eht3:
+                                eh_vdia_t = st.number_input("Valor Diária (R$)", min_value=0.0, value=float(val_dia_h), step=5.0, key=f"eht_vdia_{h_id_h}")
+                            with col_eht4:
+                                st_list = ["Hospedado", "Reservado", "Concluído"]
+                                eh_st_idx_t = st_list.index(status_h) if status_h in st_list else 0
+                                eh_st_t = st.selectbox("Status", st_list, index=eh_st_idx_t, key=f"eht_st_{h_id_h}")
+
+                            eh_tot_t = float(eh_dias_calc_t * eh_vdia_t)
+                            eh_fp_t = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro", "Pendente"], key=f"eht_fp_{h_id_h}")
+                            eh_sync_cxt = st.checkbox("💰 Atualizar / Sincronizar no Caixa", value=True, key=f"eht_synccx_{h_id_h}")
+
+                            eh_obs_t = st.text_input("Observações", value=str(r.get("observacoes", "")), key=f"eht_obs_{h_id_h}")
+
+                            if st.button("💾 Salvar Alterações", key=f"btn_save_eht_{h_id_h}", type="primary"):
+                                update_record("Hospedagem", h_id_h, {
+                                    "pet_nome": eh_pet_t.strip(),
+                                    "tutor_nome": eh_tut_t.strip(),
+                                    "tutor_telefone": eh_tel_t.strip(),
+                                    "data_entrada": eh_dtin_t.strftime("%Y-%m-%d"),
+                                    "data_saida": eh_dtout_t.strftime("%Y-%m-%d"),
+                                    "diarias": int(eh_dias_calc_t),
+                                    "valor_diaria": float(eh_vdia_t),
+                                    "valor_total": float(eh_tot_t),
+                                    "forma_pagamento": eh_fp_t,
+                                    "status": eh_st_t,
+                                    "observacoes": eh_obs_t.strip()
+                                })
+                                if eh_sync_cxt and eh_tot_t > 0:
+                                    desc_t = f"Hospedagem {eh_pet_t.strip()} ({eh_dias_calc_t} diárias) - Tutor: {eh_tut_t.strip()}"
+                                    lancar_ou_atualizar_hospedagem_caixa(h_id_h, eh_tot_t, eh_fp_t, desc_t)
+                                st.success("Estadia atualizada com sucesso!")
+                                st.rerun()
+
+                    # 2. LANÇAR / SINCRONIZAR NO CAIXA
+                    with col_hb2:
+                        with st.popover("💰 Lançar no Caixa", use_container_width=True):
+                            st.markdown(f"**Lançar no Fluxo de Caixa**")
+                            st.write(f"Pet: **{pet_h}** | Valor: **{formatar_moeda(val_tot_h)}**")
+                            fp_lan_t = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro"], key=f"fplan_t_{h_id_h}")
+                            if st.button("Confirmar Lançamento no Caixa", key=f"btn_lan_cxt_{h_id_h}", type="primary"):
+                                desc_lt = f"Hospedagem {pet_h} ({diarias_h} diárias) - Tutor: {tut_h}"
+                                lancar_ou_atualizar_hospedagem_caixa(h_id_h, val_tot_h, fp_lan_t, desc_lt)
+                                st.success("Receita de hospedagem registrada no Caixa!")
+                                st.rerun()
+
+                    # 3. RECIBO
+                    with col_hb3:
+                        with st.popover("🖨️ Recibo", use_container_width=True):
+                            renderizar_modal_comprovante(
+                                titulo="Recibo de Hospedagem / Hotelzinho",
+                                cliente_nome=tut_h,
+                                cliente_telefone=tel_h,
+                                pet_nome=pet_h,
+                                profissional="Equipe SitiPet",
+                                data_servico=dt_in_h,
+                                itens=[
+                                    {"nome": f"Diárias Hotelzinho ({diarias_h} diárias x {formatar_moeda(val_dia_h)})", "valor": val_tot_h}
+                                ],
+                                valor_total=val_tot_h,
+                                forma_pagamento=fp_h,
+                                observacoes=f"Entrada: {format_date_br(dt_in_h)} | Saída: {format_date_br(dt_out_h)}",
+                                codigo_recibo=str(h_id_h)
+                            )
+
+                    # 4. EXCLUIR NO HISTÓRICO
+                    with col_hb4:
+                        with st.popover("🗑️", use_container_width=True):
+                            st.warning(f"Excluir estadia de **{pet_h}**?")
+                            del_cxt_chk = st.checkbox("Excluir também do Caixa", value=True, key=f"del_cxt_chk_{h_id_h}")
+                            if st.button("Sim, Excluir", key=f"btn_conf_delh_{h_id_h}", type="secondary"):
+                                excluir_hospedagem_e_caixa(h_id_h, excluir_tambem_caixa=del_cxt_chk)
+                                st.success("Estadia excluída com sucesso.")
+                                st.rerun()
         else:
             st.info("Nenhuma estadia no histórico.")
