@@ -1,9 +1,11 @@
 ﻿"""
 Utilitários de Datas e Horários - SitiPet
-Tratamento de formatos de data brasileiros, cálculo de diárias e alertas de agenda.
+Tratamento de formatos de data brasileiros, cálculo de diárias e alertas de agenda e lembretes de banho.
 """
 
 from datetime import datetime, date, time, timedelta
+import re
+import urllib.parse
 
 MESES_PT_BR = {
     1: "Janeiro",
@@ -62,20 +64,106 @@ def calc_dias_hospedagem(data_entrada, data_saida) -> int:
     diff = (d_sai - d_ent).days
     return max(1, diff)
 
+def calcular_data_proximo_banho(data_base, dias: int) -> str:
+    """Calcula a data prevista para o próximo banho com base nos dias configurados."""
+    if not dias or int(dias) <= 0:
+        return ""
+    d = parse_date(data_base)
+    dt_prox = d + timedelta(days=int(dias))
+    return dt_prox.strftime("%Y-%m-%d")
+
+def avaliar_lembrete_banho(data_proximo_banho: str, status_lembrete: str = "Pendente") -> dict:
+    """
+    Avalia a situação do lembrete de retorno do pet para o próximo banho.
+    Retorna se está no momento de contatar, atrasado ou futuro.
+    """
+    if not data_proximo_banho:
+        return {
+            "tem_lembrete": False,
+            "status_label": "Sem lembrete",
+            "cor": "#94a3b8",
+            "icon": "⚪",
+            "deve_contatar": False,
+            "mensagem": "Sem lembrete agendado"
+        }
+
+    if status_lembrete in ["Contatado", "Agendado", "Concluído"]:
+        return {
+            "tem_lembrete": True,
+            "status_label": status_lembrete,
+            "cor": "#10b981",
+            "icon": "✅",
+            "deve_contatar": False,
+            "mensagem": f"Lembrete {status_lembrete}"
+        }
+
+    d_prox = parse_date(data_proximo_banho)
+    d_hoje = date.today()
+    diff_dias = (d_prox - d_hoje).days
+
+    if diff_dias < 0:
+        return {
+            "tem_lembrete": True,
+            "status_label": "Atrasado / Passou da data",
+            "cor": "#ef4444", # Vermelho
+            "icon": "🚨",
+            "deve_contatar": True,
+            "diff_dias": diff_dias,
+            "mensagem": f"Deveria voltar há {abs(diff_dias)} dia(s) ({format_date_br(d_prox)})"
+        }
+    elif diff_dias == 0:
+        return {
+            "tem_lembrete": True,
+            "status_label": "Entrar em contato HOJE",
+            "cor": "#f59e0b", # Amarelo/Laranja
+            "icon": "⏰",
+            "deve_contatar": True,
+            "diff_dias": 0,
+            "mensagem": f"Data prevista para retorno é HOJE! ({format_date_br(d_prox)})"
+        }
+    elif diff_dias <= 3:
+        return {
+            "tem_lembrete": True,
+            "status_label": f"Em {diff_dias} dia(s)",
+            "cor": "#3b82f6", # Azul
+            "icon": "📅",
+            "deve_contatar": True, # Contatar prévio
+            "diff_dias": diff_dias,
+            "mensagem": f"Retorno próximo em {diff_dias} dia(s) ({format_date_br(d_prox)})"
+        }
+    else:
+        return {
+            "tem_lembrete": True,
+            "status_label": f"Em {diff_dias} dias",
+            "cor": "#64748b",
+            "icon": "⏳",
+            "deve_contatar": False,
+            "diff_dias": diff_dias,
+            "mensagem": f"Previsto para {format_date_br(d_prox)}"
+        }
+
+def format_whatsapp_lembrete_banho(telefone: str, tutor_nome: str, pet_nome: str, dias: int, data_ultimo: str) -> str:
+    """Gera link com mensagem personalizada convidando o cliente para o próximo banho."""
+    if not telefone:
+        return ""
+    num_limpo = re.sub(r"[^\d]", "", telefone)
+    if len(num_limpo) in [10, 11] and not num_limpo.startswith("55"):
+        num_limpo = f"55{num_limpo}"
+    
+    msg = (
+        f"Olá {tutor_nome}! 🐾 Aqui é da SitiPet Pet Shop e Hotelzinho.\n\n"
+        f"Já faz {dias} dias desde o último atendimento do(a) {pet_nome} (em {format_date_br(data_ultimo)}). "
+        f"Que tal agendarmos o próximo banho para deixá-lo(a) bem cheiroso(a), limpinho(a) e protegido(a) de novo? 🛁🐶✂️\n\n"
+        f"Temos horários disponíveis para esta semana! Gostaria de reservar?"
+    )
+    return f"https://wa.me/{num_limpo}?text={urllib.parse.quote(msg)}"
+
 def calcular_status_alerta_horario(data_agendamento, horario_str: str, status_atual: str) -> dict:
-    """
-    Avalia a proximidade do horário do atendimento para gerar alertas visuais.
-    Retorna dicionário com:
-    - badge_label: texto do status
-    - cor: 'green', 'orange', 'red', 'blue', 'gray'
-    - icon: emoji representativo
-    - is_atrasado: bool
-    - is_em_breve: bool
-    """
+    """Avalia a proximidade do horário do atendimento para gerar alertas visuais na agenda."""
     if status_atual in ["Finalizado", "Concluído"]:
         return {
             "badge_label": "Finalizado",
-            "cor": "#10b981", # Verde
+            "cor": "#10b981",
             "icon": "✅",
             "is_atrasado": False,
             "is_em_breve": False,
@@ -84,7 +172,7 @@ def calcular_status_alerta_horario(data_agendamento, horario_str: str, status_at
     if status_atual == "Cancelado":
         return {
             "badge_label": "Cancelado",
-            "cor": "#94a3b8", # Cinza
+            "cor": "#94a3b8",
             "icon": "❌",
             "is_atrasado": False,
             "is_em_breve": False,
@@ -93,7 +181,7 @@ def calcular_status_alerta_horario(data_agendamento, horario_str: str, status_at
     if status_atual == "Em atendimento":
         return {
             "badge_label": "Em atendimento",
-            "cor": "#3b82f6", # Azul
+            "cor": "#3b82f6",
             "icon": "✂️",
             "is_atrasado": False,
             "is_em_breve": False,
@@ -115,7 +203,7 @@ def calcular_status_alerta_horario(data_agendamento, horario_str: str, status_at
     elif d_agend > d_hoje:
         return {
             "badge_label": status_atual or "Agendado",
-            "cor": "#6366f1", # Roxo
+            "cor": "#6366f1",
             "icon": "📅",
             "is_atrasado": False,
             "is_em_breve": False,
@@ -142,7 +230,7 @@ def calcular_status_alerta_horario(data_agendamento, horario_str: str, status_at
     if diff_minutos < -15:
         return {
             "badge_label": "Atrasado",
-            "cor": "#ef4444", # Vermelho
+            "cor": "#ef4444",
             "icon": "🚨",
             "is_atrasado": True,
             "is_em_breve": False,
@@ -151,7 +239,7 @@ def calcular_status_alerta_horario(data_agendamento, horario_str: str, status_at
     elif -15 <= diff_minutos <= 45:
         return {
             "badge_label": "Em breve (Próximo)",
-            "cor": "#f59e0b", # Amarelo/Laranja
+            "cor": "#f59e0b",
             "icon": "⏰",
             "is_atrasado": False,
             "is_em_breve": True,
@@ -160,7 +248,7 @@ def calcular_status_alerta_horario(data_agendamento, horario_str: str, status_at
     else:
         return {
             "badge_label": status_atual or "Agendado",
-            "cor": "#10b981", # Verde
+            "cor": "#10b981",
             "icon": "🟢",
             "is_atrasado": False,
             "is_em_breve": False,
