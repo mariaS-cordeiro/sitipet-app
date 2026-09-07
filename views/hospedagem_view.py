@@ -1,6 +1,6 @@
 ﻿"""
 Visão: Aba 3 – Hospedagem / Hotelzinho - SitiPet
-Controle de check-in, check-out, cálculo de diárias, ficha médica/comportamento e emissão de notas.
+Controle de check-in, check-out, cálculo de diárias, edição completa de estadias e emissão de recibos.
 """
 
 import streamlit as st
@@ -14,7 +14,7 @@ from utils.comprovante import renderizar_modal_comprovante
 
 def render_hospedagem():
     st.markdown("## 🏨 Aba 3 – Hospedagem / Hotelzinho SitiPet")
-    st.markdown("Gestão de estadias, cálculo automático de diárias (R$ 80,00), controle de cuidados e recibos de hospedagem.")
+    st.markdown("Gestão de estadias, edição de dados, cálculo de diárias (R$ 80,00), controle de cuidados e recibos de hospedagem.")
 
     df_hosp = load_table("Hospedagem")
     preco_diaria_padrao = 80.0
@@ -39,7 +39,6 @@ def render_hospedagem():
         with col_p2:
             data_saida = st.date_input("📅 Data de Saída (Check-out) *", value=hoje + timedelta(days=2), key="hsp_dt_out")
 
-        # Cálculo automático de diárias
         diarias_calc = calc_dias_hospedagem(data_entrada, data_saida)
         
         with col_p3:
@@ -128,11 +127,11 @@ def render_hospedagem():
 
                 for _, row in df_ativos.iterrows():
                     h_id = row.get("id")
-                    pet = row.get("pet_nome")
-                    tutor = row.get("tutor_nome")
-                    tel = row.get("tutor_telefone")
-                    dt_in = row.get("data_entrada")
-                    dt_out = row.get("data_saida")
+                    pet = row.get("pet_nome", "")
+                    tutor = row.get("tutor_nome", "")
+                    tel = row.get("tutor_telefone", "")
+                    dt_in = row.get("data_entrada", "")
+                    dt_out = row.get("data_saida", "")
                     diarias = int(row.get("diarias", 1))
                     val_diaria = float(row.get("valor_diaria", 80.0))
                     val_tot = float(row.get("valor_total", 0.0))
@@ -182,25 +181,77 @@ def render_hospedagem():
                         </div>
                     """, unsafe_allow_html=True)
 
-                    col_chk1, col_chk2, col_chk3 = st.columns([3, 2, 1])
+                    col_chk1, col_chk2, col_chk3, col_chk4 = st.columns([3, 2, 2, 1])
+                    
+                    # 1. CHECK-OUT
                     with col_chk1:
-                        with st.popover(f"🏁 **Realizar Check-out de {pet}**", use_container_width=True):
+                        with st.popover(f"🏁 Check-out {pet}", use_container_width=True):
                             st.markdown(f"#### Check-out do Hóspede {pet}")
                             st.write(f"Valor Base ({diarias} diárias): **{formatar_moeda(val_tot)}**")
                             
                             val_extras = st.number_input("Adicionais / Consumo Extra (R$)", min_value=0.0, value=0.0, step=10.0, key=f"extra_{h_id}")
                             tot_final = val_tot + val_extras
-                            st.markdown(f"**Valor Final a Cobrar:** <span style='color: #10b981; font-size: 18px; font-weight: 800;'>{formatar_moeda(tot_final)}</span>", unsafe_allow_html=True)
+                            st.markdown(f"**Valor Final:** <span style='color: #10b981; font-size: 18px; font-weight: 800;'>{formatar_moeda(tot_final)}</span>", unsafe_allow_html=True)
                             
                             fp = st.selectbox("Forma de Pagamento", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro"], key=f"fp_out_{h_id}")
                             
                             if st.button("Confirmar Check-out & Lançar no Caixa", key=f"btn_out_{h_id}", type="primary"):
                                 concluir_hospedagem(h_id, forma_pagamento=fp, valor_adicionais=val_extras)
-                                st.success(f"Check-out de {pet} concluído com sucesso e lançado no Caixa!")
+                                st.success(f"Check-out de {pet} concluído!")
                                 st.rerun()
 
+                    # 2. EDITAR HOSPEDAGEM
                     with col_chk2:
-                        with st.popover("🖨️ Recibo de Hotel", use_container_width=True):
+                        with st.popover("✏️ Editar", use_container_width=True):
+                            st.markdown(f"#### ✏️ Editar Hospedagem: **{pet}**")
+                            eh_pet = st.text_input("Nome do Pet", value=str(pet), key=f"eh_pet_{h_id}")
+                            eh_tutor = st.text_input("Nome do Tutor", value=str(tutor), key=f"eh_tut_{h_id}")
+                            eh_tel = st.text_input("Telefone", value=str(tel), key=f"eh_tel_{h_id}")
+                            
+                            col_eh1, col_eh2 = st.columns(2)
+                            with col_eh1:
+                                eh_dt_in = st.date_input("Data Entrada", value=parse_date(dt_in), key=f"eh_dtin_{h_id}")
+                            with col_eh2:
+                                eh_dt_out = st.date_input("Data Saída", value=parse_date(dt_out), key=f"eh_dtout_{h_id}")
+
+                            eh_diarias_calc = calc_dias_hospedagem(eh_dt_in, eh_dt_out)
+                            
+                            col_eh3, col_eh4 = st.columns(2)
+                            with col_eh3:
+                                eh_val_dia = st.number_input("Valor Diária (R$)", min_value=0.0, value=float(val_diaria), step=5.0, key=f"eh_vdia_{h_id}")
+                            with col_eh4:
+                                eh_st = st.selectbox("Status", ["Hospedado", "Reservado", "Concluído"], index=["Hospedado", "Reservado", "Concluído"].index(row.get("status", "Hospedado")) if row.get("status") in ["Hospedado", "Reservado", "Concluído"] else 0, key=f"eh_st_{h_id}")
+
+                            eh_tot_calc = float(eh_diarias_calc * eh_val_dia)
+                            eh_alim = st.text_input("Alimentação / Ração", value=str(row.get("alimentacao", "")), key=f"eh_alim_{h_id}")
+                            eh_med = st.text_input("Medicação", value=str(row.get("medicacao", "")), key=f"eh_med_{h_id}")
+                            eh_comp = st.text_input("Comportamento", value=str(row.get("comportamento", "")), key=f"eh_comp_{h_id}")
+                            eh_emerg = st.text_input("Emergência", value=str(row.get("contato_emergencia", "")), key=f"eh_em_{h_id}")
+                            eh_obs = st.text_input("Observações", value=str(row.get("observacoes", "")), key=f"eh_obs_{h_id}")
+
+                            if st.button("💾 Salvar Alterações", key=f"btn_save_eh_{h_id}", type="primary"):
+                                update_record("Hospedagem", h_id, {
+                                    "pet_nome": eh_pet.strip(),
+                                    "tutor_nome": eh_tutor.strip(),
+                                    "tutor_telefone": eh_tel.strip(),
+                                    "data_entrada": eh_dt_in.strftime("%Y-%m-%d"),
+                                    "data_saida": eh_dt_out.strftime("%Y-%m-%d"),
+                                    "diarias": int(eh_diarias_calc),
+                                    "valor_diaria": float(eh_val_dia),
+                                    "valor_total": float(eh_tot_calc),
+                                    "status": eh_st,
+                                    "alimentacao": eh_alim.strip(),
+                                    "medicacao": eh_med.strip(),
+                                    "comportamento": eh_comp.strip(),
+                                    "contato_emergencia": eh_emerg.strip(),
+                                    "observacoes": eh_obs.strip()
+                                })
+                                st.success("Hospedagem atualizada!")
+                                st.rerun()
+
+                    # 3. RECIBO
+                    with col_chk3:
+                        with st.popover("🖨️ Recibo", use_container_width=True):
                             renderizar_modal_comprovante(
                                 titulo="Recibo de Hospedagem / Hotelzinho",
                                 cliente_nome=tutor,
@@ -217,8 +268,9 @@ def render_hospedagem():
                                 codigo_recibo=str(h_id)
                             )
 
-                    with col_chk3:
-                        if st.button("🗑️", key=f"del_hsp_{h_id}"):
+                    # 4. EXCLUIR
+                    with col_chk4:
+                        if st.button("🗑️", key=f"del_hsp_{h_id}", help="Excluir hospedagem"):
                             delete_record("Hospedagem", h_id)
                             st.rerun()
 
@@ -248,16 +300,21 @@ def render_hospedagem():
             
             for _, r in df_h_show.iterrows():
                 h_id = r.get("id")
+                pet_h = r.get("pet_nome", "")
+                tut_h = r.get("tutor_nome", "")
+                tel_h = r.get("tutor_telefone", "")
+                dt_in_h = r.get("data_entrada", "")
+                dt_out_h = r.get("data_saida", "")
                 st_cor = "#10b981" if r.get("status") == "Concluído" else "#f59e0b" if r.get("status") == "Hospedado" else "#64748b"
                 
                 st.markdown(f"""
                     <div style="background: white; border-radius: 10px; padding: 12px 18px; margin-bottom: 8px; border-left: 4px solid {st_cor}; box-shadow: 0 1px 5px rgba(0,0,0,0.03);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <b>🐕 {r.get('pet_nome')}</b> (Tutor: {r.get('tutor_nome')})
+                            <b>🐕 {pet_h}</b> (Tutor: {tut_h})
                             <span style="font-weight: 700; color: {st_cor};">{r.get('status')}</span>
                         </div>
                         <div style="font-size: 12px; color: #475569; margin-top: 4px;">
-                            📅 Entrada: {format_date_br(r.get('data_entrada'))} | Saída: {format_date_br(r.get('data_saida'))} | Diárias: {r.get('diarias')} | Total: <b>{formatar_moeda(r.get('valor_total'))}</b> ({r.get('forma_pagamento')})
+                            📅 Entrada: {format_date_br(dt_in_h)} | Saída: {format_date_br(dt_out_h)} | Diárias: {r.get('diarias')} | Total: <b>{formatar_moeda(r.get('valor_total'))}</b> ({r.get('forma_pagamento')})
                         </div>
                     </div>
                 """, unsafe_allow_html=True)

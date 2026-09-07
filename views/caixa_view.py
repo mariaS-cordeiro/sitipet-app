@@ -1,6 +1,6 @@
 ﻿"""
 Visão: Aba 4 – Caixa e Gestão Financeira - SitiPet
-Controle de entradas, saídas, descontos, métricas mensais, gráfico de pizza e indicadores de serviço.
+Controle de entradas, saídas, descontos, edição completa de lançamentos, métricas mensais, gráfico de pizza e extrato.
 """
 
 import streamlit as st
@@ -8,9 +8,9 @@ import pandas as pd
 from datetime import datetime, date
 import uuid
 import io
-from utils.storage import load_table, insert_record, delete_record
+from utils.storage import load_table, insert_record, update_record, delete_record
 from utils.datas import (
-    get_today_date, get_today_date_str, format_date_br,
+    get_today_date, get_today_date_str, format_date_br, parse_date,
     get_meses_nomes, get_anos_disponiveis, mes_nome_para_numero, mes_numero_para_nome
 )
 from utils.financeiro import (
@@ -24,7 +24,7 @@ FORMAS_PAGAMENTO = ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheir
 
 def render_caixa():
     st.markdown("## 💰 Aba 4 – Caixa e Gestão Financeira")
-    st.markdown("Controle de fluxo de caixa, receitas por serviço, controle de despesas e análise mensal com indicadores estratégicos.")
+    st.markdown("Controle de fluxo de caixa, edição de lançamentos, controle de despesas e análise mensal com gráficos.")
 
     df_caixa = load_table("Caixa")
     df_bt = load_table("Banho_Tosa")
@@ -78,7 +78,7 @@ def render_caixa():
                         "criado_em": get_today_date_str()
                     }
                     insert_record("Caixa", novo_cx)
-                    st.success(f"✅ Lançamento de **{formatar_moeda(valor_lanc)}** ({tipo_mov}) salvo com sucesso!")
+                    st.success(f"✅ Lançamento de **{formatar_moeda(valor_lanc)}** salvo com sucesso!")
                     st.rerun()
 
     # ==================== FILTRO DE MÊS E ANO COM HISTÓRICO PERMANENTE ====================
@@ -144,7 +144,6 @@ def render_caixa():
 
     st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
 
-    # ==================== DOIS INDICADORES ESTRATÉGICOS ====================
     destaques = obter_servicos_destaque(df_caixa, df_bt, df_hosp, mes=m_filtro, ano=a_filtro)
 
     col_dest1, col_dest2 = st.columns(2)
@@ -174,15 +173,14 @@ def render_caixa():
             </div>
         """, unsafe_allow_html=True)
 
-    # ==================== GRÁFICO DE PIZZA MENSAL ====================
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
     st.markdown("#### 🥧 Distribuição de Participação dos Serviços no Faturamento")
     fig_pizza = gerar_grafico_pizza_servicos(df_caixa, mes=m_filtro, ano=a_filtro)
     st.plotly_chart(fig_pizza, use_container_width=True)
 
-    # ==================== EXTRATO DETALHADO ====================
+    # ==================== EXTRATO DETALHADO COM EDIÇÃO ====================
     st.markdown("---")
-    st.markdown("### 📋 Extrato de Lançamentos do Caixa")
+    st.markdown("### 📋 Extrato de Lançamentos do Caixa & Edição")
 
     df_extrato = filtrar_dataframe_por_periodo(df_caixa, mes=m_filtro, ano=a_filtro)
 
@@ -190,14 +188,12 @@ def render_caixa():
         st.info("Nenhum lançamento financeiro registrado para o período selecionado.")
         return
 
-    # Filtro interno de busca e tipo
     col_ef1, col_ef2, col_ef3 = st.columns([3, 2, 2])
     with col_ef1:
         busca_cx = st.text_input("🔍 Buscar no Extrato", placeholder="Descrição, categoria...", key="busca_cx")
     with col_ef2:
         tipo_filtro = st.selectbox("Filtrar por Tipo", ["Todos", "Entrada", "Saída", "Desconto"], key="flt_tipo_cx")
     with col_ef3:
-        # Botão para download em CSV
         csv_buffer = io.StringIO()
         df_extrato.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8-sig")
         st.download_button(
@@ -219,41 +215,80 @@ def render_caixa():
     if tipo_filtro != "Todos":
         df_show = df_show[df_show["tipo"] == tipo_filtro]
 
-    # Ordenar por data decrescente
     df_show = df_show.sort_values(by="data", ascending=False)
 
     for _, row in df_show.iterrows():
         cx_id = row.get("id")
-        tipo = row.get("tipo")
-        data_s = row.get("data")
-        desc = row.get("descricao")
-        cat = row.get("categoria")
+        tipo = row.get("tipo", "Entrada")
+        data_s = row.get("data", "")
+        desc = row.get("descricao", "")
+        cat = row.get("categoria", "")
+        serv_rel = row.get("servico_relacionado", "")
         val = float(row.get("valor", 0.0))
-        fp = row.get("forma_pagamento")
+        fp = row.get("forma_pagamento", "Pix")
         obs = row.get("observacao", "")
 
         cor_tipo = "#10b981" if tipo == "Entrada" else "#ef4444" if tipo == "Saída" else "#f59e0b"
         sinal = "+" if tipo == "Entrada" else "-"
 
-        st.markdown(f"""
-            <div style="background: white; border-radius: 10px; padding: 12px 18px; margin-bottom: 8px; border-left: 5px solid {cor_tipo}; box-shadow: 0 1px 5px rgba(0,0,0,0.03);">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <span style="font-weight: 700; font-size: 15px; color: #1e293b;">{desc}</span>
-                        <span style="font-size: 12px; color: #64748b;"> ({cat} • {fp})</span>
+        with st.container():
+            st.markdown(f"""
+                <div style="background: white; border-radius: 10px; padding: 12px 18px; margin-bottom: 8px; border-left: 5px solid {cor_tipo}; box-shadow: 0 1px 5px rgba(0,0,0,0.03);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <span style="font-weight: 700; font-size: 15px; color: #1e293b;">{desc}</span>
+                            <span style="font-size: 12px; color: #64748b;"> ({cat} • {fp})</span>
+                        </div>
+                        <div style="font-size: 16px; font-weight: 800; color: {cor_tipo};">
+                            {sinal} {formatar_moeda(val)}
+                        </div>
                     </div>
-                    <div style="font-size: 16px; font-weight: 800; color: {cor_tipo};">
-                        {sinal} {formatar_moeda(val)}
+                    <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
+                        📅 {format_date_br(data_s)} {f'| 📝 {obs}' if obs else ''}
                     </div>
                 </div>
-                <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
-                    📅 {format_date_br(data_s)} {f'| 📝 {obs}' if obs else ''}
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
-        col_act1, col_act2 = st.columns([6, 1])
-        with col_act2:
-            if st.button("🗑️", key=f"del_cx_{cx_id}", help="Excluir este lançamento"):
-                delete_record("Caixa", cx_id)
-                st.rerun()
+            col_act1, col_act2, col_act3 = st.columns([5, 2, 1])
+            
+            # EDITAR LANÇAMENTO
+            with col_act2:
+                with st.popover("✏️ Editar", use_container_width=True):
+                    st.markdown(f"#### ✏️ Editar Lançamento")
+                    ecx_desc = st.text_input("Descrição", value=str(desc), key=f"ecx_d_{cx_id}")
+                    
+                    col_ec1, col_ec2 = st.columns(2)
+                    with col_ec1:
+                        tipo_idx = ["Entrada", "Saída", "Desconto"].index(tipo) if tipo in ["Entrada", "Saída", "Desconto"] else 0
+                        ecx_tipo = st.selectbox("Tipo", ["Entrada", "Saída", "Desconto"], index=tipo_idx, key=f"ecx_t_{cx_id}")
+                    with col_ec2:
+                        ecx_val = st.number_input("Valor (R$)", min_value=0.01, value=float(val), step=5.0, key=f"ecx_v_{cx_id}")
+
+                    col_ec3, col_ec4 = st.columns(2)
+                    with col_ec3:
+                        ecx_data = st.date_input("Data", value=parse_date(data_s), key=f"ecx_dt_{cx_id}")
+                    with col_ec4:
+                        fp_idx = FORMAS_PAGAMENTO.index(fp) if fp in FORMAS_PAGAMENTO else 0
+                        ecx_fp = st.selectbox("Pagamento", FORMAS_PAGAMENTO, index=fp_idx, key=f"ecx_fp_{cx_id}")
+
+                    ecx_cat = st.text_input("Categoria", value=str(cat), key=f"ecx_cat_{cx_id}")
+                    ecx_obs = st.text_input("Observação", value=str(obs), key=f"ecx_obs_{cx_id}")
+
+                    if st.button("💾 Salvar Alterações", key=f"btn_save_ecx_{cx_id}", type="primary"):
+                        update_record("Caixa", cx_id, {
+                            "descricao": ecx_desc.strip(),
+                            "tipo": ecx_tipo,
+                            "valor": float(ecx_val),
+                            "data": ecx_data.strftime("%Y-%m-%d"),
+                            "forma_pagamento": ecx_fp,
+                            "categoria": ecx_cat.strip(),
+                            "observacao": ecx_obs.strip()
+                        })
+                        st.success("Lançamento atualizado!")
+                        st.rerun()
+
+            # EXCLUIR
+            with col_act3:
+                if st.button("🗑️", key=f"del_cx_{cx_id}", help="Excluir lançamento"):
+                    delete_record("Caixa", cx_id)
+                    st.rerun()
