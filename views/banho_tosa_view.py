@@ -56,6 +56,15 @@ def render_banho_tosa():
 
     df_bt = load_table("Banho_Tosa")
 
+    # Garantir compatibilidade de colunas caso venha de registros antigos
+    if not df_bt.empty:
+        if "data_proximo_banho" not in df_bt.columns:
+            df_bt["data_proximo_banho"] = ""
+        if "lembrete_status" not in df_bt.columns:
+            df_bt["lembrete_status"] = "Sem Lembrete"
+        if "lembrete_dias" not in df_bt.columns:
+            df_bt["lembrete_dias"] = 0
+
     # ==================== FORMULÁRIO DE CADASTRO ====================
     with st.expander("➕ **Registrar Novo Atendimento de Banho e Tosa**", expanded=False):
         st.markdown("#### 1. Dados do Animal e Tutor")
@@ -307,7 +316,8 @@ def render_banho_tosa():
                             st.markdown("**Configuração do Lembrete de Próximo Banho:**")
                             col_el1, col_el2 = st.columns(2)
                             with col_el1:
-                                e_dias_lmb = st.selectbox("Intervalo de Retorno", [0, 8, 15, 30], index=[0, 8, 15, 30].index(int(row.get("lembrete_dias", 15))) if int(row.get("lembrete_dias", 15)) in [0, 8, 15, 30] else 2, key=f"e_dlmb_{rec_id}")
+                                val_dias_cur = int(row.get("lembrete_dias", 15)) if pd.notna(row.get("lembrete_dias")) and str(row.get("lembrete_dias")).isdigit() else 15
+                                e_dias_lmb = st.selectbox("Intervalo de Retorno", [0, 8, 15, 30], index=[0, 8, 15, 30].index(val_dias_cur) if val_dias_cur in [0, 8, 15, 30] else 2, key=f"e_dlmb_{rec_id}")
                             with col_el2:
                                 e_st_lmb = st.selectbox("Status do Lembrete", ["Pendente", "Contatado", "Agendado", "Sem Lembrete"], index=["Pendente", "Contatado", "Agendado", "Sem Lembrete"].index(st_lmb) if st_lmb in ["Pendente", "Contatado", "Agendado", "Sem Lembrete"] else 0, key=f"e_stlmb_{rec_id}")
 
@@ -362,7 +372,7 @@ def render_banho_tosa():
                     # 3. WHATSAPP LEMBRETE RÁPIDO
                     with col_act3:
                         if tel:
-                            dias_int = int(row.get("lembrete_dias", 15))
+                            dias_int = int(row.get("lembrete_dias", 15)) if pd.notna(row.get("lembrete_dias")) and str(row.get("lembrete_dias")).isdigit() else 15
                             wa_link = format_whatsapp_lembrete_banho(tel, tutor, pet, dias_int, data_s)
                             st.link_button("💬 WhatsApp", wa_link, use_container_width=True)
 
@@ -380,8 +390,11 @@ def render_banho_tosa():
         if df_bt.empty:
             st.info("Nenhum atendimento registrado.")
         else:
-            # Filtrar registros que possuem lembrete
-            df_com_lembrete = df_bt[df_bt["data_proximo_banho"].astype(str).str.len() >= 8].copy()
+            # Filtrar registros que possuem lembrete com verificação segura de coluna
+            if "data_proximo_banho" in df_bt.columns:
+                df_com_lembrete = df_bt[df_bt["data_proximo_banho"].fillna("").astype(str).str.len() >= 8].copy()
+            else:
+                df_com_lembrete = pd.DataFrame()
             
             if df_com_lembrete.empty:
                 st.info("Nenhum lembrete de retorno configurado nos atendimentos anteriores. Ao cadastrar um novo banho, selecione o prazo de 8, 15 ou 30 dias!")
@@ -397,8 +410,8 @@ def render_banho_tosa():
                 d_hoje = date.today()
 
                 for _, r_l in df_com_lembrete.iterrows():
-                    dt_p = r_l.get("data_proximo_banho", "")
-                    st_p = r_l.get("lembrete_status", "Pendente")
+                    dt_p = str(r_l.get("data_proximo_banho", ""))
+                    st_p = str(r_l.get("lembrete_status", "Pendente"))
                     info = avaliar_lembrete_banho(dt_p, st_p)
 
                     d_p_obj = parse_date(dt_p)
@@ -428,7 +441,8 @@ def render_banho_tosa():
                         r_tel = r_item.get("tutor_telefone")
                         r_ult_dt = r_item.get("data")
                         r_prox_dt = r_item.get("data_proximo_banho")
-                        r_dias = int(r_item.get("lembrete_dias", 15))
+                        r_dias_raw = r_item.get("lembrete_dias", 15)
+                        r_dias = int(r_dias_raw) if pd.notna(r_dias_raw) and str(r_dias_raw).isdigit() else 15
                         r_st_lmb = r_item.get("lembrete_status", "Pendente")
 
                         st.markdown(f"""
