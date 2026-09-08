@@ -1,4 +1,4 @@
-﻿"""
+"""
 Visão: Aba 2 – Banho e Tosa - SitiPet
 Cadastro, edição completa de registros, lembretes de próximo banho (8, 15, 30 dias), emissão de notas e pós-venda.
 """
@@ -13,7 +13,7 @@ from utils.datas import (
     calcular_data_proximo_banho, avaliar_lembrete_banho, format_whatsapp_lembrete_banho, parse_date
 )
 from utils.financeiro import formatar_moeda
-from utils.comprovante import renderizar_modal_comprovante
+from utils.comprovante import renderizar_modal_comprovante, extrair_itens_servicos
 
 # Preços base por porte
 PRECOS_BANHO = {
@@ -209,11 +209,12 @@ def render_banho_tosa():
                 st.success(f"✅ Atendimento de **{pet_nome}** registrado com sucesso! Total: **{formatar_moeda(valor_total_calculado)}**.")
                 st.rerun()
 
-    # ==================== ABAS DE VISUALIZAÇÃO: HISTÓRICO & LEMBRETES ====================
+    # ==================== ABAS DE VISUALIZAÇÃO: HISTÓRICO, LEMBRETES & CUPOM ====================
     st.markdown("---")
-    tab_historico, tab_lembretes = st.tabs([
+    tab_historico, tab_lembretes, tab_cupons = st.tabs([
         "📋 **Histórico de Atendimentos & Edição**",
-        "🔔 **Central de Lembretes de Retorno (Pós-Venda)**"
+        "🔔 **Central de Lembretes de Retorno (Pós-Venda)**",
+        "🧾 **Cupom & Comprovante por Cachorro**"
     ])
 
     # ------------------ TAB 1: HISTÓRICO COM EDIÇÃO COMPLETA ------------------
@@ -344,17 +345,13 @@ def render_banho_tosa():
                                 st.success("Registro atualizado com sucesso!")
                                 st.rerun()
 
-                    # 2. BOTÃO EMITIR NOTA
+                    # 2. BOTÃO EMITIR NOTA / CUPOM
                     with col_act2:
-                        with st.popover("🖨️ Nota / Comprovante", use_container_width=True):
-                            itens_rec = []
-                            for pedaco in servs.split(","):
-                                p = pedaco.strip()
-                                if p:
-                                    itens_rec.append({"nome": p, "valor": val / max(1, len(servs.split(",")))})
+                        with st.popover("🖨️ Cupom / Nota", use_container_width=True):
+                            itens_rec = extrair_itens_servicos(servs, valor_total_fallback=val)
                             
                             renderizar_modal_comprovante(
-                                titulo="Nota de Banho e Tosa",
+                                titulo="Cupom de Banho e Tosa",
                                 cliente_nome=tutor,
                                 cliente_telefone=tel,
                                 pet_nome=pet,
@@ -479,3 +476,181 @@ def render_banho_tosa():
                             if st.button("📅 Marcar como Reagendado", key=f"btn_reag_{r_id}", use_container_width=True):
                                 update_record("Banho_Tosa", r_id, {"lembrete_status": "Agendado"})
                                 st.rerun()
+
+    # ------------------ TAB 3: EMISSÃO DE CUPOM DE SERVIÇOS POR CACHORRO ------------------
+    with tab_cupons:
+        st.markdown("### 🧾 Emissão & Visualização de Cupom de Serviços por Cachorro")
+        st.caption("Reúna todos os serviços realizados para um pet em um único comprovante detalhado (estilo cupom de supermercado), com discriminação de cada item, valores individuais, subtotal e total. Perfeito para imprimir, salvar em PDF ou enviar no WhatsApp do tutor.")
+
+        # Carregar pets de todas as fontes para seleção fácil
+        df_agd_all = load_table("Agenda")
+        df_hosp_all = load_table("Hospedagem")
+        
+        # Mapear pets únicos conhecidos
+        pets_conhecidos = {}
+        
+        if not df_bt.empty:
+            for _, r in df_bt.iterrows():
+                p_n = str(r.get("pet_nome", "")).strip()
+                if p_n and p_n not in pets_conhecidos:
+                    pets_conhecidos[p_n] = {
+                        "pet_nome": p_n,
+                        "tutor_nome": str(r.get("tutor_nome", "")),
+                        "tutor_telefone": str(r.get("tutor_telefone", "")),
+                        "raca": str(r.get("raca", "")),
+                        "porte": str(r.get("porte", "Pequeno")),
+                        "profissional": str(r.get("profissional", "Silvaneidy (Groomer)")),
+                        "servicos_detalhados": str(r.get("servicos_detalhados", "")),
+                        "valor_total": float(r.get("valor_total", 0.0)),
+                        "forma_pagamento": str(r.get("status_pagamento", "Pago (Pix)")),
+                        "data": str(r.get("data", get_today_date_str())),
+                        "id": str(r.get("id", "BT-001"))
+                    }
+
+        if not df_agd_all.empty:
+            for _, r in df_agd_all.iterrows():
+                p_n = str(r.get("pet_nome", "")).strip()
+                if p_n and p_n not in pets_conhecidos:
+                    pets_conhecidos[p_n] = {
+                        "pet_nome": p_n,
+                        "tutor_nome": str(r.get("tutor_nome", "")),
+                        "tutor_telefone": str(r.get("tutor_telefone", "")),
+                        "raca": str(r.get("raca", "")),
+                        "porte": str(r.get("porte", "Pequeno")),
+                        "profissional": str(r.get("profissional", "Silvaneidy (Groomer)")),
+                        "servicos_detalhados": str(r.get("servicos", "")),
+                        "valor_total": float(r.get("valor_total", 0.0)),
+                        "forma_pagamento": "Pix",
+                        "data": str(r.get("data", get_today_date_str())),
+                        "id": str(r.get("id", "AGD-001"))
+                    }
+
+        if not df_hosp_all.empty:
+            for _, r in df_hosp_all.iterrows():
+                p_n = str(r.get("pet_nome", "")).strip()
+                if p_n and p_n not in pets_conhecidos:
+                    pets_conhecidos[p_n] = {
+                        "pet_nome": p_n,
+                        "tutor_nome": str(r.get("tutor_nome", "")),
+                        "tutor_telefone": str(r.get("tutor_telefone", "")),
+                        "raca": "SRD",
+                        "porte": "Médio",
+                        "profissional": "Equipe SitiPet",
+                        "servicos_detalhados": f"Hospedagem ({r.get('diarias', 1)} diárias)",
+                        "valor_total": float(r.get("valor_total", 0.0)),
+                        "forma_pagamento": str(r.get("forma_pagamento", "Pix")),
+                        "data": str(r.get("data_entrada", get_today_date_str())),
+                        "id": str(r.get("id", "HOSP-001"))
+                    }
+
+        opcoes_pets = ["➕ [Digitar Novo Cachorro / Atendimento Avulso]"] + [
+            f"🐶 {p_info['pet_nome']} (Tutor: {p_info['tutor_nome']})" for p_info in pets_conhecidos.values()
+        ]
+
+        col_cup1, col_cup2 = st.columns([1, 1], gap="large")
+
+        with col_cup1:
+            st.markdown("#### 1. Selecionar ou Preencher Dados")
+            sel_pet_opcao = st.selectbox("Selecione um Pet Cadastrado ou crie um novo:", opcoes_pets, key="sel_pet_cupom")
+            
+            dados_base = {}
+            if sel_pet_opcao != "➕ [Digitar Novo Cachorro / Atendimento Avulso]":
+                nome_limpo_pet = sel_pet_opcao.replace("🐶 ", "").split(" (Tutor:")[0].strip()
+                dados_base = pets_conhecidos.get(nome_limpo_pet, {})
+
+            col_cp1, col_cp2 = st.columns(2)
+            with col_cp1:
+                cp_pet = st.text_input("🐶 Nome do Cachorro *", value=dados_base.get("pet_nome", ""), placeholder="Ex: Bob, Mel, Luna", key="cp_pet_n")
+                cp_raca = st.text_input("Raça", value=dados_base.get("raca", ""), placeholder="Ex: Poodle, Shih-tzu", key="cp_raca_n")
+            with col_cp2:
+                lista_portes = ["Pequeno", "Médio", "Grande", "Gigante"]
+                porte_base_idx = lista_portes.index(dados_base.get("porte", "Pequeno")) if dados_base.get("porte") in lista_portes else 0
+                cp_porte = st.selectbox("Porte", lista_portes, index=porte_base_idx, key="cp_porte_n")
+                cp_prof = st.selectbox("Profissional", PROFISSIONAIS, index=PROFISSIONAIS.index(dados_base.get("profissional")) if dados_base.get("profissional") in PROFISSIONAIS else 0, key="cp_prof_n")
+
+            col_cp3, col_cp4 = st.columns(2)
+            with col_cp3:
+                cp_tutor = st.text_input("👤 Nome do Tutor(a) *", value=dados_base.get("tutor_nome", ""), placeholder="Ex: Maria Cordeiro", key="cp_tut_n")
+            with col_cp4:
+                cp_tel = st.text_input("📱 Telefone / WhatsApp", value=dados_base.get("tutor_telefone", ""), placeholder="(11) 98888-7777", key="cp_tel_n")
+
+            col_cp5, col_cp6 = st.columns(2)
+            with col_cp5:
+                cp_data = st.date_input("📅 Data do Serviço", value=parse_date(dados_base.get("data", get_today_date_str())), key="cp_dt_n")
+            with col_cp6:
+                fp_list = ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro", "Pendente"]
+                fp_base = dados_base.get("forma_pagamento", "Pix")
+                fp_idx = 0
+                for idx_fp, fp_item in enumerate(fp_list):
+                    if fp_item in fp_base:
+                        fp_idx = idx_fp
+                        break
+                cp_fp = st.selectbox("Forma de Pagamento", fp_list, index=fp_idx, key="cp_fp_n")
+
+            st.markdown("---")
+            st.markdown("#### 2. Discriminação dos Serviços & Valores")
+            st.caption("Adicione ou edite cada serviço realizado para compor o cupom detalhado.")
+
+            # Extrair itens existentes se selecionou pet conhecido
+            itens_iniciais = []
+            if dados_base.get("servicos_detalhados"):
+                itens_iniciais = extrair_itens_servicos(dados_base.get("servicos_detalhados"), dados_base.get("valor_total", 0.0))
+            
+            if not itens_iniciais:
+                itens_iniciais = [
+                    {"nome": f"Banho ({cp_porte})", "valor": PRECOS_BANHO.get(cp_porte, 50.0)},
+                    {"nome": "Corte de unhas", "valor": 10.0}
+                ]
+
+            lista_servicos_finais = []
+
+            for i in range(5):
+                nome_padrao = itens_iniciais[i]["nome"] if i < len(itens_iniciais) else ""
+                valor_padrao = float(itens_iniciais[i]["valor"]) if i < len(itens_iniciais) else 0.0
+                ativo_padrao = True if i < len(itens_iniciais) else False
+
+                col_it_chk, col_it_nome, col_it_val = st.columns([1, 4, 2])
+                with col_it_chk:
+                    st.write("")
+                    st.write("")
+                    incluir_item = st.checkbox(f"#{i+1}", value=ativo_padrao, key=f"chk_cupom_it_{i}")
+                with col_it_nome:
+                    nome_srv = st.text_input(f"Descrição do Serviço {i+1}", value=nome_padrao, placeholder=f"Ex: Serviço {i+1}", key=f"nome_cupom_it_{i}")
+                with col_it_val:
+                    val_srv = st.number_input(f"Valor (R$)", min_value=0.0, value=valor_padrao, step=5.0, key=f"val_cupom_it_{i}")
+
+                if incluir_item and nome_srv.strip():
+                    lista_servicos_finais.append({"nome": nome_srv.strip(), "valor": float(val_srv)})
+
+            col_sub1, col_sub2 = st.columns(2)
+            with col_sub1:
+                cp_desconto = st.number_input("Desconto (R$)", min_value=0.0, value=0.0, step=5.0, key="cp_desc_n")
+            with col_sub2:
+                cp_obs = st.text_input("Observações no Cupom", value="", placeholder="Ex: Brinde gravatinha / Pet vacinado", key="cp_obs_n")
+
+            subtotal_calc = sum(it["valor"] for it in lista_servicos_finais)
+            total_final_calc = max(0.0, subtotal_calc - cp_desconto)
+
+        with col_cup2:
+            st.markdown("#### 3. Visualização do Cupom (Estilo Supermercado)")
+            st.caption("Pré-visualização ao vivo do comprovante gerado:")
+
+            recibo_cod = dados_base.get("id") or f"CUP-{datetime.now().strftime('%d%H%M%S')}"
+
+            renderizar_modal_comprovante(
+                titulo="Cupom de Serviços SitiPet",
+                cliente_nome=cp_tutor if cp_tutor else "Cliente SitiPet",
+                cliente_telefone=cp_tel,
+                pet_nome=cp_pet if cp_pet else "Pet",
+                raca=cp_raca,
+                porte=cp_porte,
+                profissional=cp_prof,
+                data_servico=cp_data.strftime("%Y-%m-%d"),
+                itens=lista_servicos_finais,
+                valor_total=total_final_calc,
+                forma_pagamento=cp_fp,
+                observacoes=cp_obs,
+                codigo_recibo=recibo_cod,
+                desconto=cp_desconto
+            )
+

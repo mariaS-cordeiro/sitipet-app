@@ -1,4 +1,4 @@
-﻿"""
+"""
 Visão: Aba 1 – Agenda Diária - SitiPet
 Controle dos atendimentos do dia, alertas de horário, emissão de comprovantes, edição completa e fluxo integrado.
 """
@@ -10,7 +10,7 @@ import re
 from utils.storage import load_table, insert_record, update_record, delete_record, concluir_atendimento_agenda, PROFISSIONAIS
 from utils.datas import get_today_date, get_today_date_str, format_date_br, calcular_status_alerta_horario, parse_date
 from utils.financeiro import formatar_moeda
-from utils.comprovante import renderizar_modal_comprovante
+from utils.comprovante import renderizar_modal_comprovante, extrair_itens_servicos
 
 STATUS_OPCOES = ["Agendado", "Confirmado", "Em atendimento", "Finalizado", "Cancelado"]
 
@@ -262,14 +262,11 @@ def render_agenda():
                         st.rerun()
 
             with col_b4:
-                with st.popover("🖨️ Nota", use_container_width=True):
-                    itens_recibo = []
-                    for s_item in servicos.split("+"):
-                        s_strip = s_item.strip()
-                        itens_recibo.append({"nome": s_strip, "valor": valor / max(1, len(servicos.split("+")))})
+                with st.popover("🖨️ Cupom", use_container_width=True):
+                    itens_recibo = extrair_itens_servicos(servicos, valor_total_fallback=valor)
                     
                     renderizar_modal_comprovante(
-                        titulo="Comprovante de Atendimento",
+                        titulo="Cupom de Atendimento",
                         cliente_nome=tutor,
                         cliente_telefone=telefone,
                         pet_nome=pet,
@@ -279,7 +276,7 @@ def render_agenda():
                         data_servico=data_atend,
                         itens=itens_recibo,
                         valor_total=valor,
-                        forma_pagamento="Confirmado / Concluído",
+                        forma_pagamento=f"Status: {status}",
                         observacoes=obs,
                         codigo_recibo=str(ag_id)
                     )
