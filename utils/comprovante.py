@@ -314,6 +314,9 @@ def renderizar_modal_comprovante(
         codigo_recibo=codigo_recibo
     )
 
+    import json
+    html_cupom_json = json.dumps(html_cupom)
+
     col_btn1, col_btn2 = st.columns([1, 1])
     
     with col_btn1:
@@ -338,21 +341,23 @@ def renderizar_modal_comprovante(
                 🖨️ Imprimir / Salvar PDF
             </button>
             <script>
+            var cupomHtml_{cod_limpo} = {html_cupom_json};
             function imprimirCupomSitipet_{cod_limpo}() {{
-                var targetId = 'cupom-sitipet-{cod_limpo}';
-                var elem = document.getElementById(targetId) || window.parent.document.getElementById(targetId);
-                var content = elem ? elem.outerHTML : '';
-                var win = window.open('', '', 'height=750,width=480');
-                win.document.write('<!DOCTYPE html><html><head><title>Cupom SitiPet - {pet_nome}</title>');
-                win.document.write('<style>');
-                win.document.write('@page {{ size: auto; margin: 5mm; }} body {{ font-family: \"Courier New\", Courier, monospace; background: white; margin: 0; padding: 10px; display: flex; justify-content: center; }}');
-                win.document.write('</style>');
-                win.document.write('</head><body>');
-                win.document.write(content);
-                win.document.write('</body></html>');
-                win.document.close();
-                win.focus();
-                setTimeout(function () {{ win.print(); win.close(); }}, 350);
+                var win = window.open('', '_blank', 'height=750,width=480');
+                if (win) {{
+                    win.document.write('<!DOCTYPE html><html><head><title>Cupom SitiPet - {pet_nome}</title>');
+                    win.document.write('<style>');
+                    win.document.write('@page {{ size: auto; margin: 4mm; }} body {{ font-family: \"Courier New\", Courier, monospace; background: white; margin: 0; padding: 10px; display: flex; justify-content: center; }}');
+                    win.document.write('</style>');
+                    win.document.write('</head><body>');
+                    win.document.write(cupomHtml_{cod_limpo});
+                    win.document.write('</body></html>');
+                    win.document.close();
+                    win.focus();
+                    setTimeout(function () {{ win.print(); }}, 400);
+                }} else {{
+                    alert('Por favor, permita pop-ups para imprimir o comprovante.');
+                }}
             }}
             </script>
         """, height=48)
