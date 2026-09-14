@@ -1,4 +1,4 @@
-﻿"""
+"""
 Módulo de Armazenamento Híbrido - SitiPet
 Gerencia persistência no Google Sheets (para produção / Streamlit Cloud) 
 e armazenamento local em JSON (modo offline/fallback e testes rápidos).
@@ -13,6 +13,7 @@ from datetime import datetime, date
 from utils.datas import get_today_date_str, get_now_time_str
 
 LOCAL_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sitipet_db.json")
+SYNC_QUEUE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sitipet_sync_queue.json")
 
 # Tabelas padrão do sistema
 TABLES = ["Agenda", "Banho_Tosa", "Hospedagem", "Caixa", "Servicos_Precos"]
@@ -296,13 +297,96 @@ def load_table(table_name: str) -> pd.DataFrame:
     rows = db.get(table_name, [])
     return pd.DataFrame(rows)
 
+# ==================== FILA DE SINCRONIZAÇÃO OFFLINE (SYNC QUEUE) ====================
+
+def _load_sync_queue() -> list:
+    """Lê as tabelas pendentes de sincronização com o Google Sheets."""
+    if not os.path.exists(SYNC_QUEUE_PATH):
+        return []
+    try:
+        with open(SYNC_QUEUE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _save_sync_queue(queue: list):
+    """Salva a fila de sincronização no arquivo local."""
+    os.makedirs(os.path.dirname(SYNC_QUEUE_PATH), exist_ok=True)
+    with open(SYNC_QUEUE_PATH, "w", encoding="utf-8") as f:
+        json.dump(list(set(queue)), f, ensure_ascii=False, indent=2)
+
+def enfileirar_sync(table_name: str):
+    """Adiciona uma tabela à fila de sincronização pendente."""
+    queue = _load_sync_queue()
+    if table_name not in queue:
+        queue.append(table_name)
+        _save_sync_queue(queue)
+
+def obter_status_fila_sync() -> dict:
+    """Retorna o status atual da fila de sincronização offline."""
+    queue = _load_sync_queue()
+    return {
+        "tem_pendencias": len(queue) > 0,
+        "total_pendente": len(queue),
+        "tabelas_pendentes": queue
+    }
+
+def sincronizar_fila_pendente() -> dict:
+    """
+    Tenta sincronizar todas as tabelas pendentes com o Google Sheets.
+    Retorna relatório de sucesso/falha.
+    """
+    queue = _load_sync_queue()
+    if not queue:
+        # Tenta sincronizar todas as tabelas principais para garantir espelhamento
+        queue = TABLES
+
+    client, err_c = get_google_sheets_client()
+    if not client:
+        return {"sucesso": False, "mensagem": f"Google Sheets não configurado: {err_c}", "sincronizadas": []}
+
+    spreadsheet, err_s = get_spreadsheet()
+    if not spreadsheet:
+        return {"sucesso": False, "mensagem": f"Não foi possível abrir a planilha: {err_s}", "sincronizadas": []}
+
+    db = _load_local_db()
+    sincronizadas = []
+    falhas = []
+
+    for tbl in queue:
+        try:
+            rows = db.get(tbl, [])
+            df_tbl = pd.DataFrame(rows).fillna("")
+            
+            try:
+                worksheet = spreadsheet.worksheet(tbl)
+            except Exception:
+                worksheet = spreadsheet.add_worksheet(title=tbl, rows="1000", cols="30")
+
+            worksheet.clear()
+            if not df_tbl.empty:
+                data_matrix = [df_tbl.columns.values.tolist()] + df_tbl.astype(str).values.tolist()
+                worksheet.update(data_matrix)
+            sincronizadas.append(tbl)
+        except Exception as e:
+            falhas.append(f"{tbl}: {str(e)}")
+
+    nova_fila = [t for t in queue if t not in sincronizadas]
+    _save_sync_queue(nova_fila)
+
+    if not nova_fila:
+        return {"sucesso": True, "mensagem": f"✅ {len(sincronizadas)} tabela(s) sincronizada(s) com sucesso na nuvem!", "sincronizadas": sincronizadas}
+    else:
+        return {"sucesso": False, "mensagem": f"⚠️ Sincronizadas: {len(sincronizadas)} | Falhas: {', '.join(falhas)}", "sincronizadas": sincronizadas}
+
 def save_table(table_name: str, df: pd.DataFrame):
-    """Salva o DataFrame completo na tabela (Google Sheets e Local)."""
+    """Salva o DataFrame na base local e tenta sincronizar com Google Sheets."""
     db = _load_local_db()
     df_clean = df.fillna("")
     db[table_name] = df_clean.to_dict(orient="records")
     _save_local_db(db)
 
+    # Tenta sincronizar em tempo real com Google Sheets
     client, _ = get_google_sheets_client()
     if client:
         spreadsheet, _ = get_spreadsheet()
@@ -311,14 +395,24 @@ def save_table(table_name: str, df: pd.DataFrame):
                 try:
                     worksheet = spreadsheet.worksheet(table_name)
                 except Exception:
-                    worksheet = spreadsheet.add_worksheet(title=table_name, rows="500", cols="25")
+                    worksheet = spreadsheet.add_worksheet(title=table_name, rows="1000", cols="30")
                 
                 worksheet.clear()
                 if not df_clean.empty:
                     data_to_write = [df_clean.columns.values.tolist()] + df_clean.astype(str).values.tolist()
                     worksheet.update(data_to_write)
+                
+                # Se sincronizou com sucesso, remove da fila se estava
+                q = _load_sync_queue()
+                if table_name in q:
+                    q.remove(table_name)
+                    _save_sync_queue(q)
+                return
             except Exception as e:
-                print(f"Aviso ao sincronizar com Google Sheets: {e}")
+                print(f"Aviso: Não foi possível salvar em tempo real no Sheets: {e}")
+    
+    # Se falhou ou offline, enfileira para sincronização posterior
+    enfileirar_sync(table_name)
 
 def insert_record(table_name: str, record: dict) -> str:
     """Insere um novo registro na tabela."""
@@ -539,3 +633,212 @@ def concluir_hospedagem(
         lancar_ou_atualizar_hospedagem_caixa(hospedagem_id, valor_final, forma_pagamento, desc, observacao=obs)
             
     return True
+
+# ==================== FECHAMENTO DE CONTA CONSOLIDADO NO CAIXA ====================
+
+def obter_servicos_pendentes_pagamento() -> dict:
+    """
+    Varre todas as tabelas (Banho_Tosa, Agenda, Hospedagem) e agrupa
+    todos os atendimentos/serviços que ainda não foram pagos/fechados no Caixa.
+    Retorna um dicionário indexado por chave única do cliente/pet.
+    """
+    df_bt = load_table("Banho_Tosa")
+    df_agd = load_table("Agenda")
+    df_hosp = load_table("Hospedagem")
+    
+    clientes_pendentes = {}
+
+    # 1. Banho e Tosa pendentes
+    if not df_bt.empty:
+        for _, r in df_bt.iterrows():
+            st_pag = str(r.get("status_pagamento", "")).strip()
+            # Se não começa com "Pago", está pendente
+            if not st_pag.lower().startswith("pago") or "pendente" in st_pag.lower():
+                pet = str(r.get("pet_nome", "")).strip()
+                tutor = str(r.get("tutor_nome", "")).strip()
+                if not pet:
+                    continue
+                chave = f"{tutor}___{pet}".upper()
+                if chave not in clientes_pendentes:
+                    clientes_pendentes[chave] = {
+                        "tutor_nome": tutor,
+                        "pet_nome": pet,
+                        "tutor_telefone": str(r.get("tutor_telefone", "")),
+                        "raca": str(r.get("raca", "")),
+                        "porte": str(r.get("porte", "Pequeno")),
+                        "profissional": str(r.get("profissional", "Silvaneidy (Groomer)")),
+                        "itens": []
+                    }
+                
+                val_tot = float(r.get("valor_total", 0.0))
+                servs_str = str(r.get("servicos_detalhados", "Banho e Tosa"))
+                dt_atend = str(r.get("data", get_today_date_str()))
+                
+                clientes_pendentes[chave]["itens"].append({
+                    "origem": "Banho_Tosa",
+                    "origem_id": str(r.get("id")),
+                    "nome": f"Banho/Tosa: {servs_str}",
+                    "valor": val_tot,
+                    "data": dt_atend,
+                    "detalhes": f"Atendimento em {dt_atend}"
+                })
+
+    # 2. Hospedagens pendentes
+    if not df_hosp.empty:
+        for _, r in df_hosp.iterrows():
+            st_hosp = str(r.get("status", "")).strip()
+            fp_hosp = str(r.get("forma_pagamento", "")).strip()
+            h_id = str(r.get("id"))
+            info_cx = verificar_hospedagem_no_caixa(h_id)
+            
+            # Se não foi lançado no caixa ou forma de pagamento é pendente
+            if not info_cx["lancado"] or "pendente" in fp_hosp.lower() or st_hosp == "Hospedado":
+                pet = str(r.get("pet_nome", "")).strip()
+                tutor = str(r.get("tutor_nome", "")).strip()
+                if not pet:
+                    continue
+                chave = f"{tutor}___{pet}".upper()
+                if chave not in clientes_pendentes:
+                    clientes_pendentes[chave] = {
+                        "tutor_nome": tutor,
+                        "pet_nome": pet,
+                        "tutor_telefone": str(r.get("tutor_telefone", "")),
+                        "raca": "SRD",
+                        "porte": "Médio",
+                        "profissional": "Equipe SitiPet",
+                        "itens": []
+                    }
+                
+                val_tot = float(r.get("valor_total", 0.0))
+                diarias = int(r.get("diarias", 1))
+                dt_in = str(r.get("data_entrada", ""))
+                dt_out = str(r.get("data_saida", ""))
+                
+                clientes_pendentes[chave]["itens"].append({
+                    "origem": "Hospedagem",
+                    "origem_id": h_id,
+                    "nome": f"Hospedagem ({diarias} diárias: {dt_in} a {dt_out})",
+                    "valor": val_tot,
+                    "data": dt_in,
+                    "detalhes": f"{diarias} diária(s) Hotelzinho"
+                })
+
+    # 3. Agenda com status "Finalizado" ou "Em atendimento" não sincronizada
+    if not df_agd.empty:
+        for _, r in df_agd.iterrows():
+            st_agd = str(r.get("status", "")).strip()
+            if st_agd in ["Em atendimento", "Finalizado"] and not st_agd.endswith("/ Pago"):
+                pet = str(r.get("pet_nome", "")).strip()
+                tutor = str(r.get("tutor_nome", "")).strip()
+                if not pet:
+                    continue
+                chave = f"{tutor}___{pet}".upper()
+                agd_id = str(r.get("id"))
+                
+                ja_capturado = False
+                if chave in clientes_pendentes:
+                    for it in clientes_pendentes[chave]["itens"]:
+                        if it.get("origem_id") == agd_id:
+                            ja_capturado = True
+                            break
+                if not ja_capturado:
+                    if chave not in clientes_pendentes:
+                        clientes_pendentes[chave] = {
+                            "tutor_nome": tutor,
+                            "pet_nome": pet,
+                            "tutor_telefone": str(r.get("tutor_telefone", "")),
+                            "raca": str(r.get("raca", "")),
+                            "porte": str(r.get("porte", "Pequeno")),
+                            "profissional": str(r.get("profissional", "Silvaneidy (Groomer)")),
+                            "itens": []
+                        }
+                    val_tot = float(r.get("valor_total", 0.0))
+                    servs_str = str(r.get("servicos", "Atendimento Agenda"))
+                    dt_atend = str(r.get("data", get_today_date_str()))
+                    clientes_pendentes[chave]["itens"].append({
+                        "origem": "Agenda",
+                        "origem_id": agd_id,
+                        "nome": f"Agenda: {servs_str}",
+                        "valor": val_tot,
+                        "data": dt_atend,
+                        "detalhes": f"Atendimento em {dt_atend}"
+                    })
+
+    return clientes_pendentes
+
+def fechar_conta_cliente(
+    cliente_nome: str,
+    pet_nome: str,
+    tutor_telefone: str = "",
+    raca: str = "",
+    porte: str = "Pequeno",
+    profissional: str = "Silvaneidy (Groomer)",
+    itens_selecionados: list = None,
+    valor_total: float = 0.0,
+    forma_pagamento: str = "Pix",
+    desconto: float = 0.0,
+    observacoes: str = ""
+) -> dict:
+    """
+    Fecha a conta do cliente no Caixa, marca todos os serviços selecionados
+    como pagos nas tabelas de origem (Banho_Tosa, Agenda, Hospedagem)
+    e retorna o comprovante consolidado.
+    """
+    itens_selecionados = itens_selecionados or []
+    hoje = get_today_date_str()
+    cod_recibo = f"CX-{datetime.now().strftime('%d%H%M%S')}"
+
+    # 1. Registrar entrada no Caixa
+    desc_servicos = ", ".join([it.get("nome", "Serviço") for it in itens_selecionados])
+    cx_record = {
+        "id": cod_recibo,
+        "data": hoje,
+        "tipo": "Entrada",
+        "categoria": "Fechamento de Conta",
+        "servico_relacionado": "Serviços Combinados",
+        "descricao": f"Fechamento {pet_nome} - Tutor(a): {cliente_nome}",
+        "valor": float(valor_total),
+        "forma_pagamento": forma_pagamento,
+        "referencia_id": f"FECH-{pet_nome.upper()}",
+        "observacao": f"Serviços: {desc_servicos} {f'| Desconto: R$ {desconto:.2f}' if desconto > 0 else ''} {f'| Obs: {observacoes}' if observacoes else ''}".strip(),
+        "criado_em": hoje
+    }
+    insert_record("Caixa", cx_record)
+
+    # 2. Atualizar as tabelas de origem para status Pago / Fechado
+    for it in itens_selecionados:
+        origem = it.get("origem")
+        orig_id = it.get("origem_id")
+        if not orig_id:
+            continue
+        
+        if origem == "Banho_Tosa":
+            update_record("Banho_Tosa", orig_id, {
+                "status_pagamento": f"Pago ({forma_pagamento})"
+            })
+        elif origem == "Agenda":
+            update_record("Agenda", orig_id, {
+                "status": "Finalizado / Pago"
+            })
+        elif origem == "Hospedagem":
+            update_record("Hospedagem", orig_id, {
+                "status": "Concluído",
+                "forma_pagamento": forma_pagamento
+            })
+
+    return {
+        "recibo_id": cod_recibo,
+        "cliente_nome": cliente_nome,
+        "pet_nome": pet_nome,
+        "tutor_telefone": tutor_telefone,
+        "raca": raca,
+        "porte": porte,
+        "profissional": profissional,
+        "data_servico": hoje,
+        "itens": itens_selecionados,
+        "valor_total": float(valor_total),
+        "forma_pagamento": forma_pagamento,
+        "desconto": float(desconto),
+        "observacoes": observacoes
+    }
+

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Visão: Configurações & Google Sheets - SitiPet
 Gerenciamento de conexão com o Google Drive/Sheets (siti.pet01@gmail.com), edição de tabela de preços e backup.
 """
@@ -7,30 +7,57 @@ import streamlit as st
 import pandas as pd
 import json
 import io
-from utils.storage import get_storage_status, load_table, save_table, LOCAL_DB_PATH
+from utils.storage import (
+    get_storage_status, load_table, save_table, LOCAL_DB_PATH,
+    obter_status_fila_sync, sincronizar_fila_pendente
+)
 from utils.financeiro import formatar_moeda
 
 def render_config():
-    st.markdown("## ⚙️ Configurações & Conexão Google Drive / Sheets")
-    st.markdown("Gerencie a persistência na nuvem (`siti.pet01@gmail.com`), tabela de preços dos serviços e backups do sistema.")
+    st.markdown("## ⚙️ Configurações, Segurança & Google Sheets")
+    st.markdown("Gerencie a persistência na nuvem (`siti.pet01@gmail.com`), fila de contingência offline, tabela de preços e rotinas de backup.")
 
     status_storage = get_storage_status()
+    fila_status = obter_status_fila_sync()
 
-    # ==================== STATUS DA CONEXÃO ====================
+    # ==================== STATUS DA CONEXÃO & FILA DE SINCRONIZAÇÃO ====================
     st.markdown("### 📡 Status da Persistência de Dados")
-    if status_storage["is_google_sheets"]:
-        st.success(f"""
-            **{status_storage['status_label']}**  
-            - **Planilha Ativa no Google Drive:** `{status_storage['sheet_name']}`  
-            - **Conta Vinculada:** `siti.pet01@gmail.com`  
-            - Todos os lançamentos, atendimentos e hospedagens estão sendo sincronizados continuamente com o seu Google Sheets na nuvem!
-        """)
-    else:
-        st.info(f"""
-            **{status_storage['status_label']}**  
-            - O aplicativo está funcionando com persistência local segura (`data/sitipet_db.json`).  
-            - Para salvar permanentemente na planilha do **Google Drive (`siti.pet01@gmail.com`)**, siga o passo a passo abaixo.
-        """)
+    col_st1, col_st2 = st.columns([3, 2])
+
+    with col_st1:
+        if status_storage["is_google_sheets"]:
+            st.success(f"""
+                **{status_storage['status_label']}**  
+                - **Planilha Ativa:** `{status_storage['sheet_name']}`  
+                - **Conta Vinculada:** `siti.pet01@gmail.com`  
+                - Todos os lançamentos, atendimentos e hospedagens estão sendo sincronizados continuamente com o seu Google Sheets na nuvem!
+            """)
+        else:
+            st.warning(f"""
+                **{status_storage['status_label']}**  
+                - O sistema está operando temporariamente em **armazenamento local** (`data/sitipet_db.json`).  
+                - ⚠️ **Atenção:** Se o Streamlit Cloud reiniciar antes de você configurar os *Secrets* do Google Sheets, os dados locais são reiniciados. Siga o passo a passo abaixo para conectar seu Google Sheets e garantir armazenamento permanente!
+            """)
+
+    with col_st2:
+        if fila_status["pendente"]:
+            st.warning(f"""
+                **⚠️ Fila de Sincronização Offline:**  
+                Existem **{fila_status['total_pendente']} tabela(s)** aguardando envio para o Google Sheets (`{', '.join(fila_status['tabelas_pendentes'])}`).
+            """)
+            if st.button("🔄 Sincronizar Fila com Google Sheets Agora", type="primary", use_container_width=True):
+                with st.spinner("Tentando sincronizar fila pendente com o Google Sheets..."):
+                    res = sincronizar_fila_pendente()
+                    if res["sucesso"]:
+                        st.success(res["mensagem"])
+                        st.rerun()
+                    else:
+                        st.error(res["mensagem"])
+        else:
+            st.success("""
+                **🛡️ Contingência Anti-Perda:**  
+                Nenhuma alteração pendente na fila offline. Todos os dados locais estão atualizados com o repositório principal.
+            """)
 
     # ==================== GUIA DE INTEGRAÇÃO GOOGLE SHEETS ====================
     with st.expander("📖 **Passo a Passo: Como Conectar com o Google Sheets (siti.pet01@gmail.com)**", expanded=not status_storage["is_google_sheets"]):
@@ -80,6 +107,24 @@ token_uri = "https://oauth2.googleapis.com/token"
 auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
 client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sitipet-bot..."
         """, language="toml")
+
+    # ==================== POLÍTICA E ORIENTAÇÃO DE BACKUPS ====================
+    with st.expander("🛡️ **Como Funciona o Backup dos Dados e Orientações Periódicas**", expanded=False):
+        st.markdown("""
+        ### Como garantir segurança máxima dos seus dados:
+
+        1. **Camada 1 - Google Sheets em Tempo Real:**  
+           Assim que conectado, cada atendimento salvo ou fechamento de caixa é enviado na hora para a planilha `SITIPET - Gestão` no Google Drive. Se a internet cair ou o servidor reiniciar, o histórico completo fica preservado na nuvem do Google.
+
+        2. **Camada 2 - Fila Offline de Contingência:**  
+           Se o Google Sheets estiver temporariamente instável ou sem sinal, o aplicativo salva uma cópia local e armazena a solicitação em fila. Na próxima operação ou ao clicar em *Sincronizar Fila*, os dados são descarregados na planilha.
+
+        3. **Camada 3 - Histórico de Versões do Google Drive:**  
+           O Google Sheets possui histórico nativo de alterações (*Arquivo > Histórico de versões*). Você pode restaurar qualquer ponto no tempo dos últimos meses com 1 clique se alguém apagar algo por engano.
+
+        4. **Recomendação Periódica (Semanal/Mensal):**  
+           Recomenda-se baixar o arquivo **Excel (.xlsx)** ou **JSON** no botão abaixo a cada fim de semana ou fechamento de mês e guardar em uma pasta do seu computador ou pendrive.
+        """)
 
     # ==================== GERENCIADOR DE TABELA DE PREÇOS ====================
     st.markdown("---")

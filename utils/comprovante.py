@@ -119,47 +119,49 @@ def gerar_html_comprovante(
 
     html = f"""
     <div id="cupom-sitipet-{cod_limpo}" class="cupom-container" style="
-        max-width: 400px;
+        max-width: 330px;
         margin: 0 auto;
         background: #ffffff;
-        padding: 24px 22px;
-        border: 1px solid #cbd5e1;
-        border-radius: 12px;
+        padding: 16px 14px 28px 14px;
+        border: 1px dashed #000000;
+        border-radius: 4px;
         font-family: 'Courier New', Courier, monospace, 'Lucida Console', monospace;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.06);
-        color: #0f172a;
-        line-height: 1.4;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+        color: #000000;
+        line-height: 1.35;
+        font-size: 13px;
+        font-weight: 700;
     ">
         <!-- CABEÇALHO DO ESTABELECIMENTO -->
-        <div style="text-align: center; border-bottom: 2px dashed #64748b; padding-bottom: 12px; margin-bottom: 12px;">
-            <div style="font-size: 22px; font-weight: 900; letter-spacing: 1.5px; color: #1e3a8a;">🐾 SITIPET 🐾</div>
-            <div style="font-size: 12px; font-weight: 800; color: #d82678; letter-spacing: 1px;">PET SHOP E HOTELZINHO</div>
-            <div style="font-size: 11px; color: #475569; margin-top: 3px;">Cuidando com todo amor e carinho do seu pet!</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Atendimento Especializado • Banho, Tosa & Hotel</div>
+        <div style="text-align: center; border-bottom: 2px dashed #000000; padding-bottom: 10px; margin-bottom: 10px;">
+            <div style="font-size: 20px; font-weight: 900; letter-spacing: 1px; color: #000000;">🐾 SITIPET 🐾</div>
+            <div style="font-size: 12px; font-weight: 800; color: #000000; letter-spacing: 0.5px;">PET SHOP E HOTELZINHO</div>
+            <div style="font-size: 11px; color: #000000; margin-top: 2px;">Cuidando com carinho do seu melhor amigo</div>
+            <div style="font-size: 11px; color: #000000;">Telefone / WhatsApp: (11) 98888-7777</div>
         </div>
 
         <!-- IDENTIFICAÇÃO DO CUPOM / ATENDIMENTO -->
-        <div style="font-size: 11px; text-align: center; font-weight: 800; background: #f1f5f9; padding: 4px 8px; border-radius: 6px; margin-bottom: 12px; color: #334155; text-transform: uppercase; letter-spacing: 0.5px;">
+        <div style="font-size: 12px; text-align: center; font-weight: 900; border: 1px solid #000000; padding: 4px 6px; margin-bottom: 10px; color: #000000; text-transform: uppercase;">
             📄 {titulo.upper()} • Nº #{codigo_recibo}
         </div>
 
         <!-- DADOS DO CACHORRO E DO TUTOR -->
-        <div style="font-size: 12px; border-bottom: 1px dashed #94a3b8; padding-bottom: 10px; margin-bottom: 12px;">
+        <div style="font-size: 12px; border-bottom: 1px dashed #000000; padding-bottom: 8px; margin-bottom: 10px; line-height: 1.4;">
             <div style="display: flex; justify-content: space-between;">
-                <span><b>📅 DATA:</b> {data_formatada}</span>
+                <span><b>DATA:</b> {data_formatada}</span>
                 <span><b>HORA:</b> {datetime.now().strftime('%H:%M')}</span>
             </div>
-            <div style="margin-top: 4px;"><b>🐶 CACHORRO / PET:</b> <span style="font-size: 14px; font-weight: 900; color: #1e3a8a;">{pet_nome.upper()}</span> {f'({raca} • {porte})' if raca or porte else ''}</div>
-            <div style="margin-top: 3px;"><b>👤 TUTOR(A):</b> {cliente_nome}</div>
-            {f'<div style="margin-top: 2px;"><b>📱 TELEFONE:</b> {cliente_telefone}</div>' if cliente_telefone else ''}
-            {f'<div style="margin-top: 2px;"><b>✂️ PROFISSIONAL:</b> {profissional}</div>' if profissional else ''}
+            <div style="margin-top: 3px;"><b>🐶 PET:</b> <span style="font-size: 14px; font-weight: 900;">{pet_nome.upper()}</span> {f'({raca} • {porte})' if raca or porte else ''}</div>
+            <div style="margin-top: 2px;"><b>👤 CLIENTE:</b> {cliente_nome}</div>
+            {f'<div style="margin-top: 2px;"><b>📱 CONTATO:</b> {cliente_telefone}</div>' if cliente_telefone else ''}
+            {f'<div style="margin-top: 2px;"><b>✂️ ATENDENTE:</b> {profissional}</div>' if profissional else ''}
         </div>
 
         <!-- TABELA DE SERVIÇOS DISCRIMINADOS -->
-        <div style="margin-bottom: 12px;">
-            <div style="font-size: 11px; font-weight: 900; border-bottom: 1.5px solid #0f172a; padding-bottom: 4px; margin-bottom: 6px; display: flex; justify-content: space-between;">
-                <span>QTD &nbsp; DESCRIÇÃO DO SERVIÇO</span>
-                <span>VALOR</span>
+        <div style="margin-bottom: 10px;">
+            <div style="font-size: 11px; font-weight: 900; border-bottom: 1.5px solid #000000; padding-bottom: 3px; margin-bottom: 5px; display: flex; justify-content: space-between;">
+                <span>ITEM &nbsp; DESCRIÇÃO</span>
+                <span>VALOR (R$)</span>
             </div>
             <table style="width: 100%; border-collapse: collapse;">
                 {linhas_tabela}
@@ -167,42 +169,47 @@ def gerar_html_comprovante(
         </div>
 
         <!-- TOTAIS E FORMA DE PAGAMENTO -->
-        <div style="border-top: 2px dashed #64748b; padding-top: 10px; margin-top: 10px;">
-            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #475569;">
+        <div style="border-top: 2px dashed #000000; padding-top: 8px; margin-top: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #000000;">
                 <span>Qtd. de Serviços:</span>
                 <span><b>{len(itens)} item(ns)</b></span>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #334155; margin-top: 2px;">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #000000; margin-top: 2px;">
                 <span>Subtotal dos Serviços:</span>
                 <span>{formatar_moeda(subtotal)}</span>
             </div>
-            {f'''<div style="display: flex; justify-content: space-between; font-size: 12px; color: #dc2626; margin-top: 2px;">
+            {f'''<div style="display: flex; justify-content: space-between; font-size: 12px; color: #000000; margin-top: 2px;">
                 <span>Desconto:</span>
                 <span>- {formatar_moeda(desconto)}</span>
             </div>''' if desconto > 0 else ''}
             
-            <div style="display: flex; justify-content: space-between; font-size: 17px; font-weight: 900; color: #0f172a; margin-top: 6px; padding-top: 6px; border-top: 1px dotted #94a3b8;">
+            <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 900; color: #000000; margin-top: 6px; padding-top: 6px; border-top: 1px dotted #000000;">
                 <span>TOTAL A PAGAR:</span>
-                <span style="color: #15803d;">{formatar_moeda(valor_total)}</span>
+                <span>{formatar_moeda(valor_total)}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #334155; margin-top: 4px;">
-                <span>Forma de Pagamento:</span>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #000000; margin-top: 4px;">
+                <span>Forma de Pagto:</span>
                 <span><b>{forma_pagamento}</b></span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #000000; margin-top: 2px;">
+                <span>Status da Conta:</span>
+                <span><b>✅ PAGO / FECHADO</b></span>
             </div>
         </div>
 
-        {f'''<div style="margin-top: 10px; font-size: 11px; color: #475569; background: #f8fafc; padding: 6px 8px; border-radius: 6px; border-left: 3px solid #cbd5e1;">
-            <b>Observações:</b> {observacoes}
+        {f'''<div style="margin-top: 8px; font-size: 11px; color: #000000; border: 1px dotted #000000; padding: 4px 6px;">
+            <b>Obs:</b> {observacoes}
         </div>''' if observacoes else ''}
 
-        <!-- RODAPÉ ESTILO CUPOM FISCAL / TÉRMICO -->
-        <div style="text-align: center; margin-top: 18px; border-top: 1px dashed #94a3b8; padding-top: 12px; font-size: 11px; color: #475569;">
-            <p style="margin: 0; font-weight: 800; font-size: 12px; color: #1e293b;">🐾 Muito obrigado pela preferência! 🐶❤️</p>
-            <p style="margin: 3px 0 0 0;">Cuidamos de quem você mais ama com todo carinho.</p>
-            <p style="margin: 2px 0 0 0; font-weight: 700; color: #d82678;">Volte sempre ao SitiPet!</p>
-            <div style="margin-top: 8px; font-size: 10px; color: #94a3b8; letter-spacing: 2px;">
-                * * * SITIPET PET SHOP * * *
+        <!-- RODAPÉ TÉRMICO COM ESPAÇO PARA CORTE DA GUILHOTINA -->
+        <div style="text-align: center; margin-top: 14px; border-top: 1px dashed #000000; padding-top: 10px; font-size: 11px; color: #000000;">
+            <p style="margin: 0; font-weight: 900; font-size: 12px;">🐾 Muito obrigado pela preferência! 🐶❤️</p>
+            <p style="margin: 2px 0 0 0;">Cuidando com amor de quem você ama.</p>
+            <p style="margin: 2px 0 0 0; font-weight: 800;">Volte sempre ao SitiPet!</p>
+            <div style="margin-top: 8px; font-size: 10px; letter-spacing: 2px;">
+                ================================
             </div>
+            <div style="height: 25px;"></div>
         </div>
     </div>
     """
@@ -320,14 +327,14 @@ def renderizar_modal_comprovante(
     col_btn1, col_btn2 = st.columns([1, 1])
     
     with col_btn1:
-        # Botão de impressão nativa para Impressora ou Salvar como PDF
+        # Botão de impressão nativa otimizada para impressora térmica Epson TM-T20 (80mm) ou PDF
         st.components.v1.html(f"""
             <button onclick="imprimirCupomSitipet_{cod_limpo}()" style="
                 width: 100%;
-                background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
                 color: white;
                 border: none;
-                padding: 10px 14px;
+                padding: 11px 14px;
                 border-radius: 8px;
                 font-weight: 700;
                 cursor: pointer;
@@ -336,9 +343,9 @@ def renderizar_modal_comprovante(
                 align-items: center;
                 justify-content: center;
                 gap: 6px;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
             ">
-                🖨️ Imprimir / Salvar PDF
+                🖨️ Imprimir na Epson TM-T20 / PDF
             </button>
             <script>
             var cupomHtml_{cod_limpo} = {html_cupom_json};
@@ -347,7 +354,7 @@ def renderizar_modal_comprovante(
                 if (win) {{
                     win.document.write('<!DOCTYPE html><html><head><title>Cupom SitiPet - {pet_nome}</title>');
                     win.document.write('<style>');
-                    win.document.write('@page {{ size: auto; margin: 4mm; }} body {{ font-family: \"Courier New\", Courier, monospace; background: white; margin: 0; padding: 10px; display: flex; justify-content: center; }}');
+                    win.document.write('@page {{ size: 80mm auto; margin: 0; }} body {{ font-family: \"Courier New\", Courier, monospace; background: white; margin: 0; padding: 2mm 0; display: flex; justify-content: center; }}');
                     win.document.write('</style>');
                     win.document.write('</head><body>');
                     win.document.write(cupomHtml_{cod_limpo});
@@ -360,7 +367,7 @@ def renderizar_modal_comprovante(
                 }}
             }}
             </script>
-        """, height=48)
+        """, height=50)
 
     with col_btn2:
         link_wa = formatar_link_whatsapp(cliente_telefone, texto_wa)

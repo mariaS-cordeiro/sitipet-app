@@ -1,4 +1,4 @@
-﻿"""
+"""
 Visão: Aba 3 – Hospedagem / Hotelzinho - SitiPet
 Controle de check-in, check-out, cálculo de diárias, edição e exclusão completas em todas as abas,
 e integração financeira automática em tempo real com o Fluxo de Caixa.
@@ -15,7 +15,6 @@ from utils.storage import (
 )
 from utils.datas import get_today_date, get_today_date_str, format_date_br, calc_dias_hospedagem, parse_date
 from utils.financeiro import formatar_moeda
-from utils.comprovante import renderizar_modal_comprovante
 
 def render_hospedagem():
     st.markdown("## 🏨 Aba 3 – Hospedagem / Hotelzinho SitiPet")
@@ -203,7 +202,7 @@ def render_hospedagem():
                         </div>
                     """, unsafe_allow_html=True)
 
-                    col_chk1, col_chk2, col_chk3, col_chk4, col_chk5 = st.columns([3, 2, 2, 2, 1])
+                    col_chk1, col_chk2, col_chk3, col_chk4 = st.columns([3, 2, 2, 1])
                     
                     # 1. CHECK-OUT
                     with col_chk1:
@@ -293,27 +292,8 @@ def render_hospedagem():
                                 st.success("Lançamento efetuado no Caixa com sucesso!")
                                 st.rerun()
 
-                    # 4. RECIBO
+                    # 4. EXCLUIR HOSPEDAGEM (HÓSPEDES ATUAIS)
                     with col_chk4:
-                        with st.popover("🖨️ Recibo", use_container_width=True):
-                            renderizar_modal_comprovante(
-                                titulo="Recibo de Hospedagem / Hotelzinho",
-                                cliente_nome=tutor,
-                                cliente_telefone=tel,
-                                pet_nome=pet,
-                                profissional="Equipe SitiPet",
-                                data_servico=dt_in,
-                                itens=[
-                                    {"nome": f"Diárias Hotelzinho ({diarias} diárias x {formatar_moeda(val_diaria)})", "valor": val_tot}
-                                ],
-                                valor_total=val_tot,
-                                forma_pagamento=forma_pag,
-                                observacoes=f"Entrada: {format_date_br(dt_in)} | Previsão Saída: {format_date_br(dt_out)}",
-                                codigo_recibo=str(h_id)
-                            )
-
-                    # 5. EXCLUIR HOSPEDAGEM (HÓSPEDES ATUAIS)
-                    with col_chk5:
                         with st.popover("🗑️", use_container_width=True):
                             st.warning(f"Excluir hospedagem de **{pet}**?")
                             del_cx_check = st.checkbox("Excluir também do Caixa", value=True, key=f"del_cx_chk_{h_id}")
@@ -388,7 +368,7 @@ def render_hospedagem():
                         </div>
                     """, unsafe_allow_html=True)
 
-                    col_hb1, col_hb2, col_hb3, col_hb4 = st.columns([2, 2, 2, 1])
+                    col_hb1, col_hb2, col_hb3 = st.columns([2, 2, 1])
 
                     # 1. EDITAR NO HISTÓRICO
                     with col_hb1:
@@ -452,27 +432,8 @@ def render_hospedagem():
                                 st.success("Receita de hospedagem registrada no Caixa!")
                                 st.rerun()
 
-                    # 3. RECIBO
+                    # 3. EXCLUIR NO HISTÓRICO
                     with col_hb3:
-                        with st.popover("🖨️ Recibo", use_container_width=True):
-                            renderizar_modal_comprovante(
-                                titulo="Recibo de Hospedagem / Hotelzinho",
-                                cliente_nome=tut_h,
-                                cliente_telefone=tel_h,
-                                pet_nome=pet_h,
-                                profissional="Equipe SitiPet",
-                                data_servico=dt_in_h,
-                                itens=[
-                                    {"nome": f"Diárias Hotelzinho ({diarias_h} diárias x {formatar_moeda(val_dia_h)})", "valor": val_tot_h}
-                                ],
-                                valor_total=val_tot_h,
-                                forma_pagamento=fp_h,
-                                observacoes=f"Entrada: {format_date_br(dt_in_h)} | Saída: {format_date_br(dt_out_h)}",
-                                codigo_recibo=str(h_id_h)
-                            )
-
-                    # 4. EXCLUIR NO HISTÓRICO
-                    with col_hb4:
                         with st.popover("🗑️", use_container_width=True):
                             st.warning(f"Excluir estadia de **{pet_h}**?")
                             del_cxt_chk = st.checkbox("Excluir também do Caixa", value=True, key=f"del_cxt_chk_{h_id_h}")

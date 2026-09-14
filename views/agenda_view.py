@@ -10,7 +10,6 @@ import re
 from utils.storage import load_table, insert_record, update_record, delete_record, concluir_atendimento_agenda, PROFISSIONAIS
 from utils.datas import get_today_date, get_today_date_str, format_date_br, calcular_status_alerta_horario, parse_date
 from utils.financeiro import formatar_moeda
-from utils.comprovante import renderizar_modal_comprovante, extrair_itens_servicos
 
 STATUS_OPCOES = ["Agendado", "Confirmado", "Em atendimento", "Finalizado", "Cancelado"]
 
@@ -188,7 +187,7 @@ def render_agenda():
             """, unsafe_allow_html=True)
 
             # Botões de Ação do Card
-            col_b1, col_b2, col_b3, col_b4, col_b5, col_b6 = st.columns([2, 3, 2, 2, 2, 1])
+            col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns([2, 3, 2, 2, 1])
             
             with col_b1:
                 if status == "Agendado":
@@ -262,31 +261,11 @@ def render_agenda():
                         st.rerun()
 
             with col_b4:
-                with st.popover("🖨️ Cupom", use_container_width=True):
-                    itens_recibo = extrair_itens_servicos(servicos, valor_total_fallback=valor)
-                    
-                    renderizar_modal_comprovante(
-                        titulo="Cupom de Atendimento",
-                        cliente_nome=tutor,
-                        cliente_telefone=telefone,
-                        pet_nome=pet,
-                        raca=raca,
-                        porte=porte,
-                        profissional=prof,
-                        data_servico=data_atend,
-                        itens=itens_recibo,
-                        valor_total=valor,
-                        forma_pagamento=f"Status: {status}",
-                        observacoes=obs,
-                        codigo_recibo=str(ag_id)
-                    )
-
-            with col_b5:
                 wa_url = format_whatsapp_link(telefone, pet, horario)
                 if wa_url:
                     st.link_button("💬 WhatsApp", wa_url, use_container_width=True)
 
-            with col_b6:
+            with col_b5:
                 if st.button("🗑️", key=f"del_{ag_id}", help="Excluir atendimento"):
                     delete_record("Agenda", ag_id)
                     st.rerun()
